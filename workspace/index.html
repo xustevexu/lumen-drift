@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#141826" />
+<title>Lumen Drift — Frontier Haul</title>
+<link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+<div id="app"></div>
+
+<!-- START / LOADING -->
+<div id="start">
+  <div class="start-tint"></div>
+  <div class="start-actions">
+    <div class="title-wrap">
+      <div class="title reg" aria-hidden="true">LUMEN<br>DRIFT</div>
+      <div class="title">LUMEN<br>DRIFT</div>
+    </div>
+    <div class="subtitle">FRONTIER&nbsp;HAUL · MINE · TRADE · SURVIVE</div>
+    <div class="load-label"><span id="loadText">Charging reactor…</span><span id="loadPct">0%</span></div>
+    <div class="stamps" id="stamps"></div>
+    <button id="btnStart" class="pbtn primary" disabled>LOADING</button>
+    <div class="start-sub">
+      <button id="btnNew" class="pbtn secondary hidden">NEW CAREER</button>
+      <button id="btnSavesStart" class="pbtn secondary hidden">SAVE &amp; LOAD</button>
+    </div>
+  </div>
+  <div class="start-rules">
+    <div><b>STEER</b> drag left side</div>
+    <div><b>THROTTLE</b> right slider</div>
+    <div><b>MINE</b> hold near rocks &amp; deposits</div>
+    <div><b>DOCK</b> sell ore · buy cheap · sell high elsewhere</div>
+    <div><b>OUTLAWS</b> are rare — upgrade barrier &amp; beams</div>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div id="topbar">
+    <div class="chip" id="sysChip"><b id="sysName">—</b><span id="sysEco"></span></div>
+    <div class="chip" id="dayChip">DAY 1</div>
+    <div class="chip cred" id="credChip">◈ 0</div>
+  </div>
+  <div id="topright">
+    <button class="hbtn" id="btnMap">MAP</button>
+    <button class="hbtn" id="btnMenu">❚❚</button>
+  </div>
+  <div id="radarWrap"><canvas id="radar" width="220" height="220"></canvas><div id="radarLbl">SENSOR</div></div>
+  <div id="status">
+    <div class="srow"><span>HULL</span><div class="bar"><i id="barHull" class="hu"></i></div></div>
+    <div class="srow"><span>BARR</span><div class="bar"><i id="barShield" class="sh"></i></div></div>
+    <div class="srow"><span>ENRG</span><div class="bar"><i id="barEnergy" class="en"></i></div></div>
+    <div class="srow cargo"><span>CARGO</span><b id="cargoTxt">0/24</b><span class="spd" id="spdTxt">0 m/s</span></div>
+  </div>
+  <div id="stickZone"></div>
+  <div id="stick"><div id="stickKnob"></div></div>
+  <div id="throttle"><div id="thrFill"></div><div id="thrKnob"></div><span id="thrLbl">THR</span></div>
+  <div id="actions">
+    <button id="btnAction" class="abtn primary big hidden">MINE</button>
+    <button id="btnFire" class="abtn fire">FIRE</button>
+    <button id="btnMissile" class="abtn">MSL<small id="mslCount">0</small></button>
+    <button id="btnBoost" class="abtn small">BOOST</button>
+    <button id="btnCruise" class="abtn small">CRUISE</button>
+    <button id="btnTarget" class="abtn small">TARGET</button>
+  </div>
+  <div id="markers"></div>
+  <!-- top info column: stacks itself so these never overlap each other or the touch controls -->
+  <div id="topStack">
+    <div id="targetPanel" class="hidden">
+      <div class="tp-name"><span id="tpName">—</span><span id="tpDist"></span></div>
+      <div class="bar sm"><i id="tpShield" class="sh"></i></div>
+      <div class="bar sm"><i id="tpHull" class="hu"></i></div>
+      <div id="tpInfo"></div>
+    </div>
+    <div id="autopilot" class="hidden"><span class="ap-txt">AUTOPILOT → <b id="apName"></b></span><button id="apCancel" aria-label="Cancel autopilot">✕</button></div>
+    <div id="toasts"></div>
+  </div>
+  <div id="warpFlash"></div>
+</div>
+
+<!-- STATION -->
+<div id="station" class="overlay hidden">
+  <div class="ov-head">
+    <div><div class="ov-title" id="stTitle">STATION</div><div class="ov-sub" id="stSub"></div></div>
+    <div class="ov-cred" id="stCred">◈ 0</div>
+    <button class="pbtn primary" id="btnUndock">UNDOCK</button>
+  </div>
+  <div class="tabs" id="stTabs">
+    <button data-tab="market" class="tab on">MARKET</button>
+    <button data-tab="outfit" class="tab">UPGRADES</button>
+    <button data-tab="missions" class="tab">CONTRACTS</button>
+    <button data-tab="hangar" class="tab">SHIPYARD</button>
+    <button data-tab="services" class="tab">SERVICES</button>
+  </div>
+  <div class="ov-body" id="stBody"></div>
+</div>
+
+<!-- MAP -->
+<div id="mapOv" class="overlay hidden">
+  <div class="ov-head">
+    <div><div class="ov-title">NAV CHART</div><div class="ov-sub" id="mapSub">Tap a destination</div></div>
+    <div class="tabs inline" id="mapTabs">
+      <button data-tab="system" class="tab on">SYSTEM</button>
+      <button data-tab="galaxy" class="tab">GALAXY</button>
+    </div>
+    <button class="pbtn secondary" id="btnMapClose">CLOSE</button>
+  </div>
+  <div class="map-body">
+    <canvas id="mapCanvas"></canvas>
+    <div id="mapZoom" class="map-zoom"><button data-z="in" aria-label="Zoom in">+</button><button data-z="out" aria-label="Zoom out">−</button><button data-z="reset" aria-label="Reset view">⟲</button></div>
+    <div id="mapInfo" class="map-info"></div>
+    <div class="map-hint">Drag to move · pinch to zoom</div>
+  </div>
+</div>
+
+<!-- PAUSE -->
+<div id="pause" class="overlay hidden">
+  <div class="dialog">
+    <div class="ov-title">PAUSED</div>
+    <div id="pauseStats" class="pstats"></div>
+    <button class="pbtn primary" id="btnResume">RESUME</button>
+    <button class="pbtn secondary" id="btnSaves">SAVE &amp; LOAD</button>
+    <button class="pbtn secondary" id="btnSound">SOUND: ON</button>
+    <button class="pbtn secondary" id="btnQuality">QUALITY: HIGH</button>
+    <button class="pbtn secondary danger" id="btnReset">RESET CAREER</button>
+  </div>
+</div>
+
+<!-- GENERIC DIALOG -->
+<div id="dialog" class="overlay hidden">
+  <div class="dialog" id="dialogBox"></div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
