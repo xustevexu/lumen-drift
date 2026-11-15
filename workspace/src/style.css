@@ -442,3 +442,7 @@ body:has(#dialog:not(.hidden)) #comm { display: none; }
 #topStack #comm .comm-pic img.portrait { width: 52px; height: 52px; }
 #topStack #comm .comm-text { font-size: 12.5px; }
 @keyframes commin2 { from { transform: translateY(-10px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* the next gate on a multi-jump course */
+.mk.route { color: #f0703c; font-weight: 900; }
+.mk.route .ic { width: 20px; height: 20px; border-width: 3px; border-color: #f0703c; box-shadow: 0 0 10px #f0703c; animation: routePulse 1.2s ease-in-out infinite; }
+@keyframes routePulse { 50% { box-shadow: 0 0 2px #f0703c; } }

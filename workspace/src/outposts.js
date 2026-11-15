@@ -474,9 +474,7 @@ export class OutpostManager {
     const g = this.g, s = this.state;
     if (g.docked) g.undock();
     if (o.sys === s.systemId) { const rr = this.rt.get(o.id); if (rr) g.setAutopilot(rr.pos, o.name, 150); return; }
-    const path = routePath(g.galaxy, s.systemId, o.sys);
-    const gate = path && g.world.gates.find((x) => x.to === path[1]);
-    if (gate) g.setAutopilot(gate.pos, `Gate → ${g.galaxy.systems[path[1]].name}`, 250);
+    g.setCourse(o.sys, { type: 'outpost', id: o.id });
   }
 }
 export { systemData };

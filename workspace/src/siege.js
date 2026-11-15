@@ -287,8 +287,6 @@ export class SiegeManager {
     const A = this.A, g = this.g, s = this.state; if (!A) return;
     if (g.docked) g.undock();
     if (A.target.sys === s.systemId) { const p = this.targetPos(); if (p) g.setAutopilot(p, A.target.name, 300); return; }
-    const path = routePath(g.galaxy, s.systemId, A.target.sys);
-    const gate = path && g.world.gates.find((x) => x.to === path[1]);
-    if (gate) g.setAutopilot(gate.pos, `Gate → ${g.galaxy.systems[path[1]].name}`, 250);
+    g.setCourse(A.target.sys, { type: 'siege' });
   }
 }

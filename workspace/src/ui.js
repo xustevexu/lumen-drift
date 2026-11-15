@@ -147,7 +147,7 @@ export class UI {
     $('btnMap').addEventListener('click', () => this.openMap());
     $('btnMenu').addEventListener('click', () => this.togglePause());
     window.addEventListener('resize', () => { this.layoutT = 0; });
-    $('apCancel').addEventListener('click', () => { this.g.autopilot = null; this.g.player.cruise = false; });
+    $('apCancel').addEventListener('click', () => { const had = this.g.autopilot; this.g.autopilot = null; this.g.player.cruise = false; if (!had) this.g.cancelCourse(); });
   }
 
   // ------------------------------------------------------------ toasts / fx
@@ -201,8 +201,10 @@ export class UI {
       if (ab.textContent !== label) ab.textContent = label;
     } else ab.classList.add('hidden');
     // autopilot
-    $('autopilot').classList.toggle('hidden', !g.autopilot);
+    const course = st.course;
+    $('autopilot').classList.toggle('hidden', !g.autopilot && !course);
     if (g.autopilot) $('apName').textContent = `${g.autopilot.name} · ${this.dist(g.autopilot.pos.distanceTo(p.pos))}`;
+    else if (course) { const h = g.courseHop(); $('apName').textContent = h ? `COURSE: ${course.name} · next jump ${g.galaxy.systems[h.next].name} (follow ▶)` : `COURSE: ${course.name}`; }
     // target panel
     const t = g.target, tp = $('targetPanel');
     if (t && !t.dead) {
@@ -303,7 +305,8 @@ export class UI {
     const w = window.innerWidth, h = window.innerHeight;
     const list = [];
     list.push({ key: 'station', pos: W.station.pos, cls: 'station', name: W.station.name, edge: true });
-    W.gates.forEach((gt, i) => list.push({ key: `gate${i}`, pos: gt.pos, cls: 'gate', name: `⟶ ${g.galaxy.systems[gt.to].name}`, edge: false }));
+    const hop = g.courseHop();
+    W.gates.forEach((gt, i) => { const on = hop && hop.next === gt.to; list.push({ key: `gate${i}`, pos: gt.pos, cls: on ? 'gate route' : 'gate', name: on ? `▶ NEXT JUMP: ${g.galaxy.systems[gt.to].name}${g.state.course.sys !== gt.to ? ` → ${g.state.course.name}` : ''}` : `⟶ ${g.galaxy.systems[gt.to].name}`, edge: !!on }); });
     W.fields.forEach((f, i) => { if (f.surge || f.center.distanceTo(p.pos) > f.radius) list.push({ key: `field${i}`, pos: f.center, cls: f.surge ? 'field surge' : 'field', name: f.surge ? `✦ LUMENITE SURGE · ${f.name}` : `${f.name} · ${COMM[f.primary].name}`, edge: !!f.surge }); });
     for (const m of g.events.markers()) list.push({ ...m, cls: 'event' + (m.ship === g.target ? ' target' : '') });
     for (const m of g.outposts.markers()) list.push(m);
@@ -1144,6 +1147,12 @@ export class UI {
       ctx.strokeStyle = (s.id === cur || l === cur) ? 'rgba(63,184,200,.9)' : 'rgba(239,230,210,.28)';
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
     }
+    const crs = g.state.course, cpath = crs ? this.route(cur, crs.sys) : null;
+    if (cpath) {
+      ctx.save(); ctx.strokeStyle = '#f0703c'; ctx.lineWidth = 5; ctx.setLineDash([10, 6]);
+      for (let i = 0; i < cpath.length - 1; i++) { const [x1, y1] = P(S[cpath[i]]), [x2, y2] = P(S[cpath[i + 1]]); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+      const [dx, dy] = P(S[crs.sys]); ctx.setLineDash([]); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(dx, dy, 26, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    }
     const labels = [];
     for (const s of S) {
       if (!visible(s)) continue;
@@ -1262,9 +1271,7 @@ export class UI {
     const g = this.g, sel = this.mapSel; if (!sel) return;
     if (act === 'autopilot') { g.setAutopilot(sel.dest || sel.pos, sel.name, sel.arrive || 200, sel.ignore || null); this.closeMap(); }
     if (act === 'route') {
-      const path = this.route(g.state.systemId, sel.sys); if (!path || path.length < 2) return;
-      const gate = g.world.gates.find((x) => x.to === path[1]);
-      if (gate) { g.setAutopilot(gate.pos, `Gate → ${g.galaxy.systems[path[1]].name}`, 250); this.closeMap(); }
+      if (g.setCourse(sel.sys, { type: 'station' })) this.closeMap();
     }
   }
 }

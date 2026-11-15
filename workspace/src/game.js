@@ -264,6 +264,7 @@ export class Game {
     this.accord.onEnterSystem();
     this.arcs.onEnterSystem(initial);
     this.p3.onEnterSystem();
+    if (!initial && this.state.course) setTimeout(() => { if (!this.docked && !this.warp) this.followCourse(); }, 1200);
     if (!initial) this.ui.toast(`${sys.name} · ${ECONOMIES[sys.eco].name} system`, 'info', 3.5);
     this.ui.onSystemChanged();
   }
@@ -888,6 +889,8 @@ export class Game {
     return gate ? { key: `g${gate.to}`, pos: gate.pos, name: `Gate → ${this.galaxy.systems[gate.to].name}`, arrive: 250, ignore: null, via: true } : null;
   }
   missionCourse(m) {
+    if (m.dest.sys !== this.state.systemId && m.id != null && this.state.missions.includes(m)) return this.setCourse(m.dest.sys, { type: 'mission', id: m.id });
+    if (m.dest.sys !== this.state.systemId) return this.setCourse(m.dest.sys, { type: m.dest.kind === 'station' ? 'station' : 'none' });
     const t = this.missionTarget(m);
     if (!t) return false;
     if (this.docked) this.undock();
@@ -1109,6 +1112,37 @@ export class Game {
   }
 
   // ignore: the destination object itself (station or asteroid field) so it is not treated as an obstacle
+  // ---- multi-jump courses: remembered across jumps until you arrive ----
+  // then: what to fly to on arrival: { type: 'station' | 'mission' | 'outpost' | 'siege' | 'none', id }
+  setCourse(sysId, then = { type: 'station' }) {
+    const s = this.state; if (sysId == null) return false;
+    if (this.docked) this.undock();
+    if (sysId === s.systemId) { s.course = null; this.arriveCourse(then); return true; }
+    s.course = { sys: sysId, name: this.galaxy.systems[sysId].name, then };
+    return this.followCourse();
+  }
+  courseHop() {
+    const c = this.state.course; if (!c) return null;
+    const path = routePath(this.galaxy, this.state.systemId, c.sys);
+    if (!path || path.length < 2) return null;
+    return { next: path[1], left: path.length - 1, gate: this.world.gates.find((x) => x.to === path[1]) };
+  }
+  followCourse() {
+    const s = this.state, c = s.course; if (!c) return false;
+    if (c.sys === s.systemId) { s.course = null; this.ui.toast(`✓ Arrived in ${c.name}`, 'good', 3); this.arriveCourse(c.then); return true; }
+    const h = this.courseHop();
+    if (!h || !h.gate) { s.course = null; this.ui.toast(`No known route to ${c.name}`, 'warn', 3); return false; }
+    this.setAutopilot(h.gate.pos, `Gate → ${this.galaxy.systems[h.next].name} · course: ${c.name} (${h.left} jump${h.left > 1 ? 's' : ''})`, 250);
+    return true;
+  }
+  arriveCourse(then) {
+    if (!then || then.type === 'none') return;
+    if (then.type === 'mission') { const m = this.state.missions.find((x) => x.id === then.id); if (m) this.missionCourse(m); return; }
+    if (then.type === 'outpost') { const o = this.state.outposts.find((x) => x.id === then.id); if (o) this.outposts.courseTo(o); return; }
+    if (then.type === 'siege') { this.siege.courseTo(); return; }
+    this.setAutopilot(this.world.station.pos, this.world.station.name, 200, this.world.station);
+  }
+  cancelCourse() { if (this.state.course) { this.state.course = null; this.ui.toast('Course cleared', 'info', 2); } }
   setAutopilot(pos, name, arrive = 200, ignore = null) {
     this.autopilot = { pos: pos.clone(), name, arrive, ignore, aim: new THREE.Vector3() };
     this.ui.toast(`Autopilot → ${name}`, 'info', 2);
