@@ -6,7 +6,7 @@ export function newState(seed) {
   return {
     v: 1, seed, credits: 2000, day: 1, dayTime: 0.25,
     systemId: null, pos: null,
-    ships: [{ uid: 1, hull: 'wren', mods: emptyMods(), hp: null, missiles: 0, cargo: {} }],
+    ships: [{ uid: 1, hull: 'wren', mods: emptyMods(), hp: null, missiles: 0, cargo: {}, uniques: [] }],
     active: 1, nextUid: 2,
     market: {}, intel: {}, wanted: {},
     outlawRoll: {}, // `${sys}:${day}` -> {hit, at}

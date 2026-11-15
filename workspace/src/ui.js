@@ -841,7 +841,7 @@ export class UI {
       const H = HULLS[arg];
       if (s.credits >= H.price) {
         s.credits -= H.price;
-        const uid = s.nextUid++; s.ships.push({ uid, hull: arg, mods: emptyMods(), hp: null, missiles: 0, cargo: {} });
+        const uid = s.nextUid++; s.ships.push({ uid, hull: arg, mods: emptyMods(), hp: null, missiles: 0, cargo: {}, uniques: [] });
         g.audio.play('coins', { vol: 0.9 });
         if (g.switchShip(uid)) this.toast(`${H.name} ${H.cls} purchased and ready!`, 'good', 3);
         else this.toast(`${H.name} ${H.cls} purchased — it waits in your hangar until your contracts are done`, 'good', 4);

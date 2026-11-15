@@ -174,7 +174,10 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- ships
-  activeShipRec() { return this.state.ships.find((s) => s.uid === this.state.active); }
+  activeShipRec() {
+    for (const sh of this.state.ships) if (!Array.isArray(sh.uniques)) sh.uniques = []; // records created mid-game may lack it
+    return this.state.ships.find((s) => s.uid === this.state.active);
+  }
   spawnPlayer(pos, yaw = 0) {
     const rec = this.activeShipRec();
     if (this.player) this.player.remove();
