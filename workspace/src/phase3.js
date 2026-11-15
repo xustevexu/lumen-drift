@@ -88,6 +88,8 @@ export class Phase3 {
 
   // ------------------------------------------------------------ rival
   rivalTough() { return 1.25 + this.p.rival.level * 0.22 - (this.p.rival.weak ? 0.25 : 0); }
+  // Kade only takes an interest once you've genuinely made a name: Prospector rank, at least two headlines about you, Day 10+
+  rivalReady() { const s = this.s, deeds = this.p.news.filter((n) => n.k === 'you' && !n.t.startsWith("Pilots' Guild")).length; return s.day >= 10 && pilotRank(s) >= 2 && this.fame() >= 2 && deeds >= 1; }
   wager() { return 500 + this.p.rival.level * 400; }
   updateRival() {
     const g = this.g, s = this.s, rv = this.p.rival;
@@ -96,7 +98,7 @@ export class Phase3 {
       if (!o || o.dead || !g.outlaws.includes(o)) { if (!this.duel.over) this.rivalLeft(); }
       return;
     }
-    if (!unlocked(s, 'rival') || s.day < rv.next || pilotRank(s) < 1) return;
+    if (!unlocked(s, 'rival') || s.day < rv.next || !this.rivalReady()) return;
     if (g.docked || g.warp || g.player.dead || g.ui.modalOpen() || g.time - (this.enteredAt || 0) < 25) return;
     if (g.outlaws.some((o) => !o.dead)) return; // not in the middle of someone else's fight
     rv.next = s.day + 2; // if declined/ignored, try again later
@@ -106,7 +108,7 @@ export class Phase3 {
     const g = this.g, rv = this.p.rival, w = this.wager();
     const first = !rv.met;
     const intro = first
-      ? `<p>A sleek ship drops out of warp alongside you, all chrome and orange striping. The pilot grins on your screen.</p><p>"<b>Kade Rourke</b>. Bounty hunter, trader, best pilot in the lanes, ask anyone. I keep hearing the name <b>${this.cs}</b>. Let's find out if it's deserved."</p>`
+      ? `<p>A sleek ship drops out of warp alongside you, all chrome and orange striping. The pilot grins on your screen.</p><p>"<b>Kade Rourke</b>. Bounty hunter, trader, best pilot in the lanes, ask anyone. ${(() => { const n = this.p.news.find((x) => x.k === 'you'); return n ? `I read about you: <i>${n.t.replace(/\.$/, '')}</i>. ` : ''; })()}Every few months somebody new gets their name in the feeds and thinks they're the best out here. I like to check, personally. Nothing personal, <b>${this.cs}</b>. Just reputation."</p>`
       : `<p>Orange stripes on your scope. Of course.</p><p>Kade: "${rv.losses > rv.wins ? "I've been tuning my ship since our last dance. Rematch?" : rv.wins > rv.losses ? 'Back for another lesson?' : 'Tie-breaker, friend?'}"</p>`;
     rv.met = true;
     g.ui.dialog(`<div class="arc-head">${this.pic()}<div><small>RIVAL · DUEL ${rv.wins + rv.losses + 1}</small><div class="ov-title">KADE ROURKE</div></div></div>${intro}

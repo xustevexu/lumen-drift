@@ -262,7 +262,10 @@ export class Story {
     if (!U.fabrication && rank >= 1 && (eco === 'industrial' || eco === 'hightech') && g.docked) open('fabrication', 'wick', 'This station has a fabricator. Upgrades → Fabrication builds module upgrades from refined goods for about half the credits, and prototypes from any blueprints you find.');
     if (!U.fleet && rank >= 2) open('fleet', 'wick', "Your rank opens doors: pilots will fly as your wingmen, and spare ships can run trade routes on their own. Both live in the Shipyard tab.");
     if (!U.sieges && U.factions && s.day >= 8) open('sieges', isAccordEco(eco) ? 'hale' : 'kask', isAccordEco(eco) ? 'Patrol intelligence: the Red Wake is massing armadas. When one is announced, stations hire militia. Independent pilots who help will be remembered.' : "Word from the deep mines: the Wake's been gathering big. When they hit a station they come in waves. Hire militia if you can, and bring friends.");
-    if (!U.rival && rank >= 1 && s.day >= 5) open('rival', 'kask', "Heads up: a hotshot named Kade Rourke has been asking about you in every cantina from here to the core. Bounty hunter, show-off, very good. He'll find you sooner or later.");
+    if (!U.rival && g.p3.rivalReady()) {
+      const why = g.p3.p.news.find((n) => n.k === 'you' && !n.t.startsWith("Pilots' Guild"));
+      open('rival', 'kask', `You made the news${why ? `: "${why.t.replace(/\.$/, '')}"` : ''}. Word travels. There's a bounty hunter named Kade Rourke who collects reputations the way you collect ore, and he's started asking about you in the cantinas. Show-off, very good. He'll come looking.`);
+    }
     this.updateDebt();
     this.g.arcs.update();
     this.g.p3.update(1);
