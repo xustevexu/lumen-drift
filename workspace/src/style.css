@@ -475,3 +475,8 @@ button.origin:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var
 .journal .jr small { opacity: .7; }
 .journal .jr.story { border-color: #6b4fa0; background: #2a2340; }
 #dialogBox:has(.journal) { width: min(560px, 94vw); }
+
+/* market rows: each row boxed, and the row you're on lights up (controller focus, mouse hover, finger press) */
+.row:not(.head) { border: 1px solid var(--line); border-bottom: 1px solid var(--line); background: rgba(255,255,255,.025); margin-bottom: 4px; transition: background 100ms, border-color 100ms; }
+.row:not(.head):hover, .row:not(.head):active, body.gamepad .row:not(.head):has(.gp-focus) { background: #2a3550; border-color: var(--warm); box-shadow: inset 4px 0 0 var(--warm); }
+body.gamepad .row:not(.head):has(.gp-focus) .nm { color: #ffd2b8; }
