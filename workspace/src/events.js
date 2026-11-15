@@ -410,6 +410,7 @@ export class SectorEvents {
     g.fx.explosion(o.pos.clone(), 6, 0xff7a40);
     setTimeout(() => g.fx.explosion(o.pos.clone().add(new THREE.Vector3(18, 6, -10)), 4, 0xffb060), 350);
     g.audio.play('explosion', { vol: 1 });
+    if (attacker === g.player) g.p3.headline(`Red Wake base in ${g.sysInfo.name} destroyed. Locals credit ${g.state.p3.callsign}.`);
     if (e) e.status = 'done';
     if (r && r.derelict) { r.derelict.group.visible = true; r.derelict.occupied = false; g.state.derelictLooted[`${g.state.systemId}:${r.derelict.seed}`] = g.state.day; }
     this.rt.delete(o.eventId);

@@ -60,7 +60,7 @@ export class AccordManager {
       if (a.retarget <= 0 || !a.tgt || a.tgt.dead) {
         a.retarget = 2; a.tgt = null; let bd = 3000;
         // the Patrol hunts the Red Wake; it does not fight Accord enforcers
-        for (const o of g.outlaws) { if (o.dead || o.isBase || o.static || (o.faction && ACCORD.has(o.faction))) continue; const d = Math.min(o.pos.distanceTo(a.pos), o.pos.distanceTo(p.pos) * 0.8); if (d < bd) { bd = d; a.tgt = o; } }
+        for (const o of g.outlaws) { if (o.dead || o.isBase || o.static || o.isRival || (o.faction && ACCORD.has(o.faction))) continue; const d = Math.min(o.pos.distanceTo(a.pos), o.pos.distanceTo(p.pos) * 0.8); if (d < bd) { bd = d; a.tgt = o; } }
         if (a.tgt && !a.called && !a.tgt.faction) { a.called = true; g.story.chatter(a.name, pick(PATROL_ENGAGE)); }
       }
       const t = a.tgt; a.firing = false; a.boost = false;
@@ -126,6 +126,7 @@ export class AccordManager {
     const g = this.g, s = this.state, n = licenseNeeds(s);
     if (!n.ok || s.accord.licensed) return false;
     s.credits -= LICENSE_PRICE; s.accord.licensed = true;
+    g.p3.headline(`${s.p3.callsign} granted an Accord Pilot License.`);
     for (const f of ACCORD) g.factionChange(f, 3, true);
     g.story.comm('hale', s.story.origin === 'deserter'
       ? "Well. The board approved your license, against my advice. I'll admit you earned it. Welcome back to Accord space, pilot. Don't make me regret it."

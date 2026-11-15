@@ -428,3 +428,10 @@ body.gamepad:has(.overlay:not(.hidden)) #hud [data-pad]::after { display: none; 
 body:has(#dialog:not(.hidden)) #comm { display: none; }
 #dialogBox:has(.ending-art) { width: min(660px, 95vw); }
 .ending-art { display: block; width: calc(100% + 32px); margin: -16px -16px 2px; max-height: 40vh; object-fit: cover; border-bottom: 3px solid var(--ink); }
+.bar .rumor { display: flex; align-items: center; gap: 10px; justify-content: space-between; border-bottom: 1px dashed rgba(0,0,0,.2); padding: 4px 0; }
+.bar .rumor p { margin: 0; flex: 1; }
+.bar .hidden-rumor { opacity: .6; font-style: italic; }
+.callsign { display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 6px; }
+.callsign label { font: 900 11px var(--font); letter-spacing: 1.5px; color: var(--warm); }
+.callsign input { font: 800 16px var(--font); padding: 6px 10px; width: 220px; background: #f2ead8; color: var(--ink); border: 2px solid var(--warm); text-align: center; }
+.cs-roll { cursor: pointer; font-size: 20px; background: none; border: 2px solid var(--warm); padding: 2px 8px; }

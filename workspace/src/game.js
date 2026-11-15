@@ -24,6 +24,7 @@ import { normalizeCraftState } from './craft.js';
 import { Story, normalizeStoryState, lockAll, applyOrigin, isAccordEco } from './story.js';
 import { AccordManager, ACCORD_RAID, FRINGE_RAID } from './accord.js';
 import { ArcManager, raidMult, fuelMult } from './arcs.js';
+import { Phase3 } from './phase3.js';
 import { SectorEvents, normalizeEventState } from './events.js';
 import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
 import { RNG, clamp, damp, fmt } from './rng.js';
@@ -70,6 +71,7 @@ export class Game {
     this.story = new Story(this);
     this.accord = new AccordManager(this);
     this.arcs = new ArcManager(this);
+    this.p3 = new Phase3(this);
     window.addEventListener('resize', () => this.resize());
     this.resize();
 
@@ -260,6 +262,7 @@ export class Game {
     this.explore.onEnterSystem();
     this.accord.onEnterSystem();
     this.arcs.onEnterSystem(initial);
+    this.p3.onEnterSystem();
     if (!initial) this.ui.toast(`${sys.name} · ${ECONOMIES[sys.eco].name} system`, 'info', 3.5);
     this.ui.onSystemChanged();
   }
@@ -376,7 +379,7 @@ export class Game {
     const near = entry.distanceTo(this.player.pos) < this.player.stats.sensor;
     if (opts.toast) this.ui.toast(opts.toast, 'warn', 5); else this.ui.toast(near ? `⚠ OUTLAW CONTACT — ${n > 1 ? `${n} raiders` : base} jumped in!` : `⚠ Outlaw jump signature detected in ${this.sysInfo.name}`, 'warn', 5);
     this.audio.play('alarm', { vol: 0.8 });
-    if (near && !opts.siegeOf && !opts.guardOf) setTimeout(() => this.accord.outlawTaunt(n > 1 ? `${base} α` : base, opts.faction), 2200);
+    if (near && !opts.siegeOf && !opts.guardOf && !opts.quiet) setTimeout(() => this.accord.outlawTaunt(n > 1 ? `${base} α` : base, opts.faction), 2200);
   }
 
   updateOutlawSchedule() {
@@ -501,6 +504,7 @@ export class Game {
 
   // ------------------------------------------------------------ damage hooks
   onShipHit(ship, attacker, killed) {
+    if (ship.isRival && this.p3.onRivalHit(ship, killed)) return;
     if (ship.kind === 'trader' && attacker === this.player) {
       const sid = this.state.systemId;
       if (!ship.reported) { ship.reported = true; this.state.wanted[sid] = (this.state.wanted[sid] || 0) + 1; this.ui.toast(`Trader ${ship.name} reports your attack — WANTED in ${this.sysInfo.name} `, 'warn', 4); this.traderCrime(ship, 6, 2); }
@@ -559,6 +563,7 @@ export class Game {
     const p = this.player;
     this.fx.explosion(p.pos.clone(), 3, 0xffa050);
     p.obj.visible = false; p.dead = true;
+    this.p3.onPlayerDestroyed();
     for (const b of this.playerBeams) b.visible = false;
     this.mineBeam.visible = false;
     this.audio.loop('beam', 'beam', false); this.audio.loop('mine', 'mine', false);
@@ -1187,6 +1192,7 @@ export class Game {
     this.siege.newDay(this.state.day);
     this.fleet.newDay(this.state.day);
     this.arcs.newDay();
+    this.p3.newDay();
     this.ui.toast(`Day ${this.state.day} — markets updated`, 'info', 2.5);
     this.checkDeadlines();
   }

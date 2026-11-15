@@ -158,7 +158,7 @@ export class DebtorArc {
     else if (e === 'enforcer') { reward = this.burnMarker(12000); g.factionChange('pirate', 20); for (const f of LAWFUL) g.factionChange(f, -10, true); reward += ' · Red Wake +20 · lawful −10'; }
     else if (e === 'witness') { reward = this.burnMarker(10000); s.accord.licensed = true; for (const f of ACCORD) g.factionChange(f, 15, true); g.factionChange('pirate', -40); reward += ' · Accord Pilot License · Accord +15 · Red Wake −40'; }
     else { reward = this.burnMarker(0); g.factionChange('pirate', -25); for (const f of LAWFUL) g.factionChange(f, -5, true); reward += ` · ◈${fmt(this.income())}+/day in collections · Red Wake −25 · lawful −5`; }
-    a.done = true; a.stage = 'done'; a.goal = null; a.target = null; s.story.title = E.title;
+    a.done = true; a.stage = 'done'; a.goal = null; a.target = null; s.story.title = E.title; g.p3.endingNews(e);
     const text = {
       partner: "<p>Marrow's flagship burns over the station while Vex's crews cheer on every channel. Afterwards she tears your marker in half, then in half again.</p><p>\"Partners, then. Don't get sentimental about it.\"</p>",
       enforcer: '<p>Marrow takes the ledger with two fingers, as if it might be dirty. Somewhere below, a cell door closes.</p><p>"Your marker is ash. Welcome to my Wake, pilot."</p>',

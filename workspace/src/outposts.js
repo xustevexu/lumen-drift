@@ -334,6 +334,7 @@ export class OutpostManager {
     if (s.charters <= 0) return;
     if (this.list().length >= maxOutposts(s)) { this.g.ui.toast(`You can run ${maxOutposts(s)} outpost${maxOutposts(s) > 1 ? 's' : ''} at your rank`, 'warn', 3); return; }
     s.charters--;
+    this.g.p3.headline(`New independent outpost founded in ${this.g.sysInfo.name} by ${s.p3.callsign}.`);
     const o = { id: `op${Date.now() % 1e9}`, sys: s.systemId, site: { kind: site.kind, index: site.index, ore: site.ore, gas: site.gas, name: site.name }, name: `${site.name} Outpost`,
       founded: s.day, slots: Array(HUB_ARMS).fill(null), storage: {}, credits: 0, log: [], raid: null, hp: 1 };
     s.outposts.push(o);

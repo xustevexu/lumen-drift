@@ -218,6 +218,7 @@ export class SiegeManager {
     g.factionChange(fid, 8); g.factionChange('pirate', -10);
     g.ui.toast(`✓ SIEGE BROKEN! ${A.target.name} holds. ${FACTIONS[fid].name} pays ◈${fmt(pay)} · ${FACTIONS[fid].short} +8 · Red Wake −10`, 'good', 8);
     s.siege.record.won++;
+    g.p3.headline(`SIEGE BROKEN: ${g.state.p3.callsign} helps ${A.target.name} turn back a Red Wake armada.`);
     this.finish();
   }
   defeat(why) {

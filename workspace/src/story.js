@@ -6,6 +6,7 @@ import { pilotRank } from './economy.js';
 import { FACTIONS } from './factions.js';
 import { jumpsFrom } from './missions.js';
 import { normalizeArc } from './arcs.js';
+import { normalizeP3, randomCallsign } from './phase3.js';
 
 const INK = '#141826';
 export const ACCORD = new Set(['agricultural', 'industrial', 'hightech']);
@@ -22,6 +23,7 @@ export const CAST = {
   mercer: { name: 'Capt. Doran Mercer', role: 'Accord Patrol', color: '#6f9fff', p: { bg: '#1e2c50', skin: '#e0b896', hair: '#b8b0a0', style: 'short', outfit: '#1c2848', trim: '#c0c8d8', acc: [] } },
   varga: { name: 'Capt. Ilse Varga', role: 'Lantern Fleet', color: '#58c8e8', p: { kind: 'ai' } },
   unmarked: { name: 'Unmarked Pilot', role: 'No transponder', color: '#3a4a6a', p: { kind: 'ai' } },
+  rival: { name: 'Kade Rourke', role: 'Rival Ace', color: '#ff8a3a', noArt: true, p: { bg: '#4a2a14', skin: '#d9a87e', hair: '#2a1a10', style: 'short', outfit: '#e8e2d4', trim: '#ff8a3a', acc: ['earring'] } },
   kask: { name: 'Brodie Kask', role: 'Deepcore Union', color: '#d9a35a', p: { bg: '#4a3a22', skin: '#b98a66', hair: '#5a4632', style: 'bald', outfit: '#6a5a44', trim: '#d9a35a', acc: ['beard'] } },
 };
 
@@ -125,7 +127,7 @@ export function applyOrigin(state, galaxy, id) {
 }
 
 // ---------------------------------------------------------------- state
-export const UNLOCK_KEYS = ['contracts', 'events', 'factions', 'exploration', 'outposts', 'fabrication', 'fleet', 'sieges'];
+export const UNLOCK_KEYS = ['contracts', 'events', 'factions', 'exploration', 'outposts', 'fabrication', 'fleet', 'sieges', 'rival'];
 export function normalizeStoryState(state) {
   if (!state.story || typeof state.story !== 'object') state.story = { origin: null, said: {} };
   if (!state.story.said) state.story.said = {};
@@ -133,7 +135,7 @@ export function normalizeStoryState(state) {
   if (!state.unlocks || typeof state.unlocks !== 'object') state.unlocks = Object.fromEntries(UNLOCK_KEYS.map((k) => [k, true]));
   for (const k of UNLOCK_KEYS) if (typeof state.unlocks[k] !== 'boolean') state.unlocks[k] = true;
   if (!state.accord || typeof state.accord !== 'object') state.accord = { licensed: false, lastScanDay: -9 };
-  return normalizeArc(state);
+  return normalizeP3(normalizeArc(state));
 }
 export function lockAll(state) { state.unlocks = Object.fromEntries(UNLOCK_KEYS.map((k) => [k, false])); }
 export const unlocked = (state, k) => !state.unlocks || state.unlocks[k] !== false;
@@ -204,13 +206,17 @@ export class Story {
   intro(id, onPick) {
     const o = ORIGINS[id];
     const lines = o.intro.map((l, i) => `<p class="intro-line" style="animation-delay:${0.4 + i * 1.6}s">${l}</p>`).join('');
-    this.g.ui.dialog(`<img class="intro-pic" src="./portraits/${id}.jpg" alt=""><div class="intro-title">${o.name.toUpperCase()}</div>${lines}`, [{ label: 'BEGIN', primary: true, fn: () => onPick(id) }]);
+    const cs = this.g.state.p3 ? this.g.state.p3.callsign : 'Wren';
+    this.g.ui.dialog(`<img class="intro-pic" src="./portraits/${id}.jpg" alt=""><div class="intro-title">${o.name.toUpperCase()}</div>${lines}<div class="callsign"><label>YOUR CALLSIGN</label><input id="csInput" maxlength="20" value="${cs}"><button class="cs-roll" title="Random callsign">🎲</button></div>`, [{ label: 'BEGIN', primary: true, fn: () => { const v = (document.getElementById('csInput').value || '').trim().replace(/[<>&"]/g, '').slice(0, 20); this.pendingCallsign = v || cs; onPick(id); } }]);
+    document.querySelector('.cs-roll').addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('csInput').value = randomCallsign(); });
+    const inp = document.getElementById('csInput'); for (const ev of ['keydown', 'keyup']) inp.addEventListener(ev, (e) => e.stopPropagation());
     const box = document.getElementById('dialogBox'); box.classList.remove('originBox'); box.classList.add('introBox');
     document.getElementById('dialog').classList.add('introOv');
   }
   // first moments of a new career
   opening() {
     const s = this.state, o = s.story.origin;
+    if (this.pendingCallsign) { s.p3.callsign = this.pendingCallsign; this.pendingCallsign = null; }
     document.getElementById('dialog').classList.remove('introOv');
     setTimeout(() => this.comm('wick', "Systems online. I'm Wick, your ship's assistant. Let's keep it simple to start: mine that asteroid field, or dock at the station and trade. I'll walk you through the rest when it matters.", { once: 'wick-hello' }), 1500);
     if (o === 'deserter') setTimeout(() => this.comm('hale', "Pilot. You left the Patrol without a word, and with a Patrol cipher key. Bring it back and we can talk. Until then, don't expect a warm welcome in Accord space.", { once: 'hale-1', kind: 'warn' }), 26000);
@@ -233,8 +239,10 @@ export class Story {
     if (!U.fabrication && rank >= 1 && (eco === 'industrial' || eco === 'hightech') && g.docked) open('fabrication', 'wick', 'This station has a fabricator. Upgrades → Fabrication builds module upgrades from refined goods for about half the credits, and prototypes from any blueprints you find.');
     if (!U.fleet && rank >= 2) open('fleet', 'wick', "Your rank opens doors: pilots will fly as your wingmen, and spare ships can run trade routes on their own. Both live in the Shipyard tab.");
     if (!U.sieges && U.factions && s.day >= 8) open('sieges', isAccordEco(eco) ? 'hale' : 'kask', isAccordEco(eco) ? 'Patrol intelligence: the Red Wake is massing armadas. When one is announced, stations hire militia. Independent pilots who help will be remembered.' : "Word from the deep mines: the Wake's been gathering big. When they hit a station they come in waves. Hire militia if you can, and bring friends.");
+    if (!U.rival && rank >= 1 && s.day >= 5) open('rival', 'kask', "Heads up: a hotshot named Kade Rourke has been asking about you in every cantina from here to the core. Bounty hunter, show-off, very good. He'll find you sooner or later.");
     this.updateDebt();
     this.g.arcs.update();
+    this.g.p3.update(1);
   }
 
   // ---- the Debtor's marker ----
@@ -253,7 +261,7 @@ export class Story {
     const s = this.state, st = s.story, n = Math.min(amount, st.debt, s.credits);
     if (n <= 0) return 0;
     s.credits -= n; st.debt -= n; st.debtWeekPaid = (st.debtWeekPaid || 0) + n;
-    if (st.debt <= 0) { st.debt = 0; this.g.factionChange('pirate', 6); this.comm(st.debtRate ? 'marrow' : 'vex', "Paid in full. Huh. Didn't think you had it in you. Your marker's burned. If you ever want real work, you know where the Wake drinks.", { kind: 'good' }); }
+    if (st.debt <= 0) { st.debt = 0; this.g.p3.headline(`${this.state.p3.callsign} pays off a Red Wake marker in full. "Didn't think they had it in them," says a Wake source.`); this.g.factionChange('pirate', 6); this.comm(st.debtRate ? 'marrow' : 'vex', "Paid in full. Huh. Didn't think you had it in you. Your marker's burned. If you ever want real work, you know where the Wake drinks.", { kind: 'good' }); }
     return n;
   }
   debtHTML() {

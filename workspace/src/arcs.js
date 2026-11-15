@@ -232,7 +232,7 @@ export class ArcManager {
       g.addCredits(30000); for (const f of ['agricultural', 'mining', 'industrial', 'hightech', 'frontier']) g.factionChange(f, -10, true);
       reward = '+◈30,000 · all lawful factions −10';
     }
-    a.done = true; a.stage = 'done'; a.goal = null; a.target = null; s.story.title = E.title;
+    a.done = true; a.stage = 'done'; a.goal = null; a.target = null; s.story.title = E.title; g.p3.endingNews(end);
     const text = {
       accord: '<p>Mercer is led out of the Patrol office in restraints. Hale hands you a license, and an old Patrol pin.</p><p>"You should have come to me first. But you came. Welcome home, Commander."</p>',
       fringe: "<p>The whole station turns out. Someone's playing music; someone's crying. Ama presses a woven band into your hand.</p><p>\"Out here you're family now. The Accord can keep its licenses.\"</p>",

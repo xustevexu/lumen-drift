@@ -533,6 +533,7 @@ export class UI {
     else if (this.stTab === 'outfit') body.innerHTML = this.outfitHTML();
     else if (this.stTab === 'hangar') body.innerHTML = this.hangarHTML();
     else if (this.stTab === 'missions') body.innerHTML = this.missionsHTML();
+    else if (this.stTab === 'bar') body.innerHTML = this.g.p3.barHTML();
     else body.innerHTML = this.servicesHTML();
     body.scrollTop = scroll;
   }
@@ -747,11 +748,12 @@ export class UI {
       ${this.accordHTML()}
       ${this.siegeHTML()}
       ${U('events') ? this.newsHTML() : ''}
+      ${g.p3.headlinesHTML()}
       ${U('exploration') ? this.exploreHTML() : ''}
       ${U('outposts') ? this.outpostsHTML() : ''}
       ${U('factions') ? this.factionsHTML() : ''}
       <div class="card"><div><h3>Rest Until Tomorrow</h3><p>Skip to Day ${s.day + 1}. Prices recover, rocks and deposits regrow, new events may appear.${restNote}</p></div><button class="sbtn" data-act="rest">REST</button></div>
-      <div class="card"><div><h3>Pilot Record</h3><p>${s.story.title ? `<b>${s.story.title}</b> · ` : ''}Rank <b>${RANK_NAMES[r]}</b> · Net worth ◈ ${fmt(netWorth(s))}<br>Mined ${s.stats.mined} · Trades ${s.stats.trades} · Contracts ${s.stats.contracts} · Outlaws downed ${s.stats.kills} · Jumps ${s.stats.jumps}</p></div></div>
+      <div class="card"><div><h3>Pilot Record</h3><p><b>${s.p3.callsign}</b>${s.story.title ? ` · <i>${s.story.title}</i>` : ''} <button class="sbtn" data-act="p3rename">RENAME</button><br>Rank <b>${RANK_NAMES[r]}</b> · Net worth ◈ ${fmt(netWorth(s))}<br>Mined ${s.stats.mined} · Trades ${s.stats.trades} · Contracts ${s.stats.contracts} · Outlaws downed ${s.stats.kills} · Jumps ${s.stats.jumps}${s.p3.rival.met ? `<br>Duels with Kade Rourke: won ${s.p3.rival.losses}, lost ${s.p3.rival.wins}` : ''}</p></div></div>
       <p style="font:600 12px var(--font);opacity:.75">Outlaw raids grow from lone raiders to packs of 2–4 as your rank rises. Barriers and beams are your best insurance.</p>
     </div>`;
   }
@@ -797,6 +799,7 @@ export class UI {
 
   stationAction(act, arg, n) {
     const g = this.g, E = g.economy, s = g.state, sid = s.systemId, p = g.player; n = Number(n);
+    if (act.startsWith('p3')) { if (act === 'p3rename') { const v = window.prompt('Your callsign:', s.p3.callsign); if (v && v.trim()) s.p3.callsign = v.trim().replace(/[<>&"]/g, '').slice(0, 20); g.save(); } else g.p3.act(act, arg); if (act === 'p3course') return; this.renderStation(); return; }
     const sell = (cid, q) => { if (q <= 0) return 0; const v = E.sell(sid, cid, q); p.cargo[cid] -= q; if (!p.cargo[cid]) delete p.cargo[cid]; return v; };
     if (act === 'sell') { const v = sell(arg, Math.min(n, p.cargo[arg] || 0)); g.addCredits(v); g.onSale(v); s.stats.trades++; g.audio.play('coins', { vol: 0.7 }); }
     else if (act === 'sellore' || act === 'sellall') {

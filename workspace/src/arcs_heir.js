@@ -160,7 +160,7 @@ export class HeirArc {
     else if (e === 'settlers') { this.removeHeart(); g.factionChange('frontier', 30); g.factionChange('mining', 15); g.factionChange('hightech', -10, true); g.addCredits(10000); reward = 'Settlers +30 · Deepcore +15 · Fringe fuel half price · +◈10,000'; }
     else if (e === 'institute') { this.removeHeart(); const p = this.institutePrice(); g.addCredits(p); g.factionChange('hightech', 25); for (const f of ACCORD) if (f !== 'hightech') g.factionChange(f, 10, true); g.factionChange('frontier', -15); g.factionChange('mining', -15, true); reward = `+◈${fmt(p)} · Institute +25 · Accord +10 · Fringe −15`; }
     else { this.removeHeart(); for (const f of LAWFUL) g.factionChange(f, 8, true); g.addCredits(10000); reward = "Lumen's Rest is a sanctuary · all lawful factions +8 · +◈10,000"; }
-    a.done = true; a.stage = 'done'; a.goal = null; a.target = null; s.story.title = E.title;
+    a.done = true; a.stage = 'done'; a.goal = null; a.target = null; s.story.title = E.title; g.p3.endingNews(e);
     const text = {
       keep: "<p>You sit in the cockpit with the Heart humming behind you. Wick has gone quiet, which is new.</p><p>\"Captain Varga's engines ran on this for three hundred years,\" Wick says at last. \"I think it likes us.\"</p>",
       settlers: '<p>The whole station comes out to see it. Children press their faces to the glass. By morning, the first Fringe refinery is growing Lumenite of its own.</p><p>Ama, quietly: "Your grandmother would be so proud. So would mine."</p>',
