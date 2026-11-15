@@ -231,7 +231,16 @@ export class Story {
   // how to open things on the device actually in use: controller, touch screen or keyboard
   howTo(what) {
     const pad = this.g.pad, L = pad && pad.layout;
-    if (pad && pad.active && L) return what === 'map' ? `press ${L.BACK} on your controller` : `press ${L.START} on your controller and choose MESSAGE LOG`;
+    if (pad && pad.active && L) {
+      // name the button AND say where it is: "View" means nothing if you don't know which one it is
+      const where = {
+        View: 'View (the small two-squares button, left of the centre Xbox button)', Menu: 'Menu (the small three-lines button, right of the centre Xbox button)',
+        Share: 'Share (the small button left of the touchpad)', Create: 'Create (the small button left of the touchpad)', Options: 'Options (the small button right of the touchpad)',
+        '−': '− (minus)', '+': '+ (plus)',
+      };
+      const b = (k) => where[L[k]] || L[k];
+      return what === 'map' ? `press ${b('BACK')} on your controller` : `press ${b('START')} on your controller and choose MESSAGE LOG`;
+    }
     const touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
     if (touch) return what === 'map' ? 'tap MAP at the top right' : 'tap the pause button (❚❚) at the top right and choose MESSAGE LOG';
     return what === 'map' ? 'press M (or click MAP at the top right)' : 'press Esc (or click ❚❚ at the top right) and choose MESSAGE LOG';
