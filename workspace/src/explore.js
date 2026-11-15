@@ -279,7 +279,13 @@ export class ExploreManager {
       blueprintDrop(g, 0.1, 'wreck');
       if (ex.lore < CHARTED_LORE && this.logFound(rng)) {
         const idx = ex.lore++; ex.dry = 0;
-        this.showLog(idx, `Salvaged ◈${fmt(cr)} from the wreck.${idx === 0 ? ' The core is cold... then it wakes. You have the feeling it was waiting for someone.' : idx === 1 ? ' Your first log hummed as you closed in. The logs answer each other.' : ''}`);
+        const heir = s.story && s.story.origin === 'heir';
+        const note = idx === 0 ? ' The core was dormant, and your scan woke it. Scavengers cut these cores out for the crystal and kill them. Nobody ever stayed long enough to listen. You did.'
+          : idx === 1 && heir ? " Grandmother's log was already awake. As you closed in it hummed, and this one answered."
+          : idx === 1 ? ' Your first log hummed as you closed in, and this one answered.' : '';
+        this.showLog(idx, `Salvaged ◈${fmt(cr)} from the wreck.${note}`);
+        if (idx === 0) setTimeout(() => g.story.comm('wick', "That core was dormant until our scan woke it. I think that's how the Fleet meant it: for whoever keeps going. It's humming at the other wrecks now.", { once: 'tip-firstlog' }), 1200);
+        if (idx === 1 && heir) setTimeout(() => g.story.comm('wick', "Your grandmother's log called that one awake. The scavengers have been cutting these cores out for centuries, and a cut core dies. Nobody ever listened. Now the logs answer each other, and they'll answer us.", { once: 'tip-firstlog' }), 1200);
         this.logNews(ex.lore); this.checkUnlock();
       } else {
         ex.dry++;
