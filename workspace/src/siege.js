@@ -10,6 +10,7 @@ import { pilotRank } from './economy.js';
 import { FACTIONS, factionTier, standingWith } from './factions.js';
 import { jumpsFrom, routePath } from './missions.js';
 import { builtMods, countBuilt } from './outposts.js';
+import { dogfight } from './ai.js';
 
 export const MILITIA_PRICE = 2500, MILITIA_MAX = 4;
 const LEAD_DAYS = 3, ARRIVE_AT = 0.4; // announced 3 days ahead; armada arrives at 09:36 on the day
@@ -179,25 +180,7 @@ export class SiegeManager {
       if (!t) { // patrol around the station
         _v.subVectors(a.pos, home).setY(0).normalize(); _v2.crossVectors(_v, UP).multiplyScalar(a.orbitDir);
         _v3.copy(home).addScaledVector(_v, 260).addScaledVector(_v2, 200); a.steerTo(_v3, dt, 0.6); a.throttle = 0.5;
-      } else {
-        const d = a.pos.distanceTo(t.pos);
-        if (d > 320) { _v.copy(t.vel).multiplyScalar(d / 300).add(t.pos); a.steerTo(_v, dt); a.throttle = 1; a.boost = d > 800 && a.energy > 40; }
-        else {
-          _v.subVectors(a.pos, t.pos).normalize(); _v2.crossVectors(_v, UP).multiplyScalar(a.orbitDir);
-          _v3.copy(t.pos).addScaledVector(_v, 170).addScaledVector(_v2, 150);
-          if (g.angleTo(a, t.pos) > 0.5) a.steerTo(_v3, dt); else a.steerTo(t.pos, dt, 0.9);
-          a.throttle = 0.7;
-        }
-        const aim = g.angleTo(a, t.pos);
-        if (d < a.stats.beamRange && aim < 0.3 && a.energy > 5) {
-          a.firing = true; a.energy -= 8 * dt;
-          g.fx.showBeam(a.beam, g.muzzleWorld(a, 0, _v3), t.pos, 1.4);
-          const killed = t.damage(a.stats.dps * dt, a.pos, a);
-          g.onShipHit(t, a, killed);
-        }
-        a.mslCd -= dt;
-        if (a.missiles > 0 && a.mslCd <= 0 && d < 800 && aim < 0.6) { a.missiles--; a.mslCd = 10; g.fx.launchMissile(a, t, a.stats.mslDmg); }
-      }
+      } else dogfight(g, a, t, dt);
       if (!a.firing && a.beam) a.beam.visible = false;
       a.updateMotion(dt, g.world); a.updateVisual(dt);
     }

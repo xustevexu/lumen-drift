@@ -6,6 +6,8 @@ import { SLOT_COUNT, autoInfo, readSlot, writeSlot, summarize, exportText, expor
 import { liveEvents, describe, eventIcon } from './events.js';
 import { CHARTER_PRICE, maxOutposts, storageUsed, storageCap, builtMods } from './outposts.js';
 import { MILITIA_PRICE, MILITIA_MAX } from './siege.js';
+import { SKILLS, ROUTE_WAGE, maxWingmen, skillOf } from './fleet.js';
+import { jumpsFrom } from './missions.js';
 import { FACTIONS, FACTION_ORDER, UNIQUES, UNIQUE_BY_FACTION, factionTier, nextFactionTier, standingWith, tierPerks, uniqueSlots } from './factions.js';
 import { MAX_ACTIVE, offersFor, missionSpace, boundToShip, typeTag, modTags, destText, needText, dueText, reqMet, reqText, standingOf, standingTier, nextStanding } from './missions.js';
 
@@ -290,6 +292,7 @@ export class UI {
     W.fields.forEach((f, i) => { if (f.surge || f.center.distanceTo(p.pos) > f.radius) list.push({ key: `field${i}`, pos: f.center, cls: f.surge ? 'field surge' : 'field', name: f.surge ? `✦ LUMENITE SURGE · ${f.name}` : `${f.name} · ${COMM[f.primary].name}`, edge: !!f.surge }); });
     for (const m of g.events.markers()) list.push({ ...m, cls: 'event' + (m.ship === g.target ? ' target' : '') });
     for (const m of g.outposts.markers()) list.push(m);
+    for (const a of g.fleet.wings) if (!a.dead && a.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${a.uid}`, pos: a.pos, cls: 'ally', name: a.name.split(' ')[0] });
     for (const a of g.siege.allies) if (!a.dead && a.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${a.uid}`, pos: a.pos, cls: 'ally', name: a.name });
     W.deposits.forEach((d, i) => { if (d.pos.distanceTo(p.pos) < 5000 && d.amount > 0) list.push({ key: `dep${i}`, pos: d.pos, cls: 'deposit', name: `◆ ${COMM[d.ore].name} deposit` }); });
     W.derelicts.forEach((d, i) => { if (!d.occupied && d.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `der${i}`, pos: d.pos, cls: 'derelict', name: d.name }); });
@@ -590,14 +593,44 @@ export class UI {
       let btns = '';
       for (const o of owned) {
         const used = Object.values(o.cargo).reduce((a, b) => a + b, 0);
-        btns += o.uid === s.active ? `<button class="pbtn secondary" disabled>ACTIVE${used ? ` · hold ${used}` : ''}</button>` : `<button class="pbtn secondary" data-act="switch" data-arg="${o.uid}">FLY THIS ${H.name.toUpperCase()}${used ? ` · hold ${used}` : ''}</button>`;
+        if (o.uid === s.active) btns += `<button class="pbtn secondary" disabled>ACTIVE${used ? ` · hold ${used}` : ''}</button>`;
+        else if (o.route) {
+          const R = o.route, A = g.galaxy.systems[R.a].name, B = g.galaxy.systems[R.b].name;
+          btns += `<div class="route-box"><b>⛴ ROUTE ${A} ⇄ ${B}</b><br><small>${R.leg === 0 ? `→ ${B}` : `→ ${A}`} · day ${R.progress + 1}/${R.legDays} · ${R.trips} round trip${R.trips === 1 ? '' : 's'} · net ◈${fmt(R.earned)}${R.last ? `<br>Last: ${R.last}` : ''}</small><br><button class="sbtn" data-act="recall" data-arg="${o.uid}">RECALL TO HANGAR</button></div>`;
+        } else btns += `<button class="pbtn secondary" data-act="switch" data-arg="${o.uid}">FLY THIS ${H.name.toUpperCase()}${used ? ` · hold ${used}` : ''}</button><button class="pbtn secondary" style="font-size:13px;padding:8px" data-act="route" data-arg="${o.uid}">ASSIGN TRADE ROUTE FROM HERE</button>`;
       }
       if (H.price > 0) btns += `<button class="pbtn ${s.credits >= H.price ? 'primary' : 'secondary'}" style="font-size:14px;padding:9px" data-act="buyship" data-arg="${hid}" ${s.credits >= H.price ? '' : 'disabled'}>BUY · ◈ ${fmt(H.price)}</button>`;
       h += `<div class="card ${owned.some((o) => o.uid === s.active) ? 'active' : ''}"><h3>${H.name}<span class="cls">${H.cls.toUpperCase()}</span></h3><p>${H.desc}</p>${stats}${btns}</div>`;
     }
-    return h + '</div>';
+    return this.wingmenHTML() + h + '</div>';
   }
 
+  wingmenHTML() {
+    const g = this.g, s = g.state, max = maxWingmen(s);
+    const mine = s.wingmen.map((w) => { const k = skillOf(w), nx = SKILLS[k + 1];
+      return `<div class="card"><h3>${w.call}<span class="cls">${SKILLS[k].name.toUpperCase()}</span></h3><p>${w.name} · ${w.kills} kill${w.kills === 1 ? '' : 's'}${nx ? ` (${nx.name} at ${nx.kills})` : ''} · wage ◈${w.wage}/day</p><p><b>${w.status === 'active' ? 'On duty: flies with you' : `Recovering: back Day ${w.back}`}</b></p><button class="pbtn secondary" style="font-size:13px;padding:8px" data-act="dismiss" data-arg="${w.id}">DISMISS</button></div>`; }).join('');
+    const full = s.wingmen.length >= max;
+    const recruits = g.fleet.recruits().map((r) => `<div class="card"><h3>${r.call}<span class="cls">${SKILLS[r.base].name.toUpperCase()}</span></h3><p>${r.name} · wage ◈${r.wage}/day</p>
+      <button class="pbtn ${!full && s.credits >= r.fee ? 'primary' : 'secondary'}" style="font-size:13px;padding:8px" data-act="hire" data-arg="${r.id}" ${!full && s.credits >= r.fee ? '' : 'disabled'}>${full ? `MAX ${max} AT YOUR RANK` : `HIRE · ◈ ${fmt(r.fee)}`}</button></div>`).join('');
+    return `<div class="ms-head"><span>WINGMEN ${s.wingmen.length}/${max}</span><small>Escorts fly in formation, follow you through jumps and fight what threatens you. Their kills pay you half a bounty and earn them promotions.</small></div>
+      <div class="cards">${mine}${recruits || '<p class="ms-empty">No pilots looking for work here today.</p>'}</div>
+      <div class="ms-head" style="margin-top:12px"><span>SHIPS · TRADE ROUTES</span><small>Spare ships can run a trade route from this station: they buy low, sell high and earn while you're away (crew ◈${ROUTE_WAGE}/day plus 25% of profits). Raids are a risk on dangerous lanes; tougher hulls shrug them off.</small></div>`;
+  }
+  openRoutePicker(uid) {
+    const g = this.g, s = g.state, rec = s.ships.find((x) => x.uid === uid); if (!rec) return;
+    const cap = computeStats(rec.hull, rec.mods).cargo, dist = jumpsFrom(g.galaxy, s.systemId);
+    const opts = g.galaxy.systems.filter((x) => x.id !== s.systemId && dist[x.id] <= 3).map((x) => {
+      const known = !!s.intel[x.id], est = g.fleet.estimate(s.systemId, x.id, cap), risk = Math.round((g.fleet.legRisk(rec, s.systemId, x.id) + g.fleet.legRisk(rec, x.id, s.systemId)) / 2 * 100);
+      const days = Math.max(1, dist[x.id]);
+      return { x, known, est, risk, days, perDay: known ? Math.round((est.perTrip - ROUTE_WAGE * days * 2) / (days * 2)) : null };
+    }).sort((a, b) => (b.perDay ?? -1e9) - (a.perDay ?? -1e9));
+    const rows = opts.map((o) => `<p style="margin:2px 0"><b>${o.x.name}</b> <small>(${ECONOMIES[o.x.eco].name}, ${o.days} day${o.days > 1 ? 's' : ''} each way, raid risk ~${o.risk}% per leg)</small><br><small>${o.known ? `Est. ${o.est.out ? `${COMM[o.est.out.cid].name} out` : 'empty out'}, ${o.est.back ? `${COMM[o.est.back.cid].name} back` : 'empty back'} · <b>◈${fmt(o.perDay)}/day</b> after wages` : 'No market intel yet: profit unknown'}</small></p>`).join('');
+    this.dialog(`<div class="ov-title">TRADE ROUTE · ${HULLS[rec.hull].name.toUpperCase()}</div><p>From <b>${g.sysInfo.name}</b>, hold ${cap}. Estimates use today's prices; markets move as your ship trades.</p>${rows}`,
+      [...opts.slice(0, 5).map((o) => ({ label: `${o.x.name}${o.perDay != null ? ` · ◈${fmt(o.perDay)}/day` : ' · ?'}`, primary: o === opts[0], fn: () => {
+        const err = g.fleet.assign(uid, o.x.id);
+        this.toast(err || `${HULLS[rec.hull].name} now trading ${g.sysInfo.name} ⇄ ${o.x.name}`, err ? 'warn' : 'good', 3.5); g.save(); this.renderStation();
+      } })), { label: 'CANCEL' }]);
+  }
   repairCost() { const p = this.g.player; return Math.ceil(Math.ceil(p.maxHp - p.hp) * 1.5 * HULLS[p.hullId].priceMul * (1 + factionTier(standingWith(this.g.state, this.g.sysInfo.eco)).repair)); }
   siegeHTML() {
     const g = this.g, A = g.state.siege.active; if (!A || A.phase === 'done') return '';
@@ -701,6 +734,11 @@ export class UI {
       while (q > 0 && E.quoteBuy(sid, arg, q) > s.credits) q--;
       if (q > 0) { const cost = E.buy(sid, arg, q); s.credits -= cost; p.cargo[arg] = (p.cargo[arg] || 0) + q; s.stats.trades++; g.audio.play('click', { vol: 0.6 }); }
       else this.toast('Not enough credits or cargo space', 'warn', 2);
+    } else if (act === 'hire') {
+      if (g.fleet.hire(arg)) { g.audio.play('coins', { vol: 0.7 }); this.toast('Wingman hired: they launch with you when you undock', 'good', 3); }
+    } else if (act === 'dismiss') { g.fleet.dismiss(arg);
+    } else if (act === 'route') { this.openRoutePicker(Number(arg)); return;
+    } else if (act === 'recall') { g.fleet.recall(Number(arg)); this.toast('Ship recalled to your hangar', 'info', 2.5);
     } else if (act === 'militia') {
       if (g.siege.hire()) { g.audio.play('coins', { vol: 0.7 }); this.toast('Militia pilot hired for the siege', 'good', 2.5); }
     } else if (act === 'siegecourse') { g.siege.courseTo(); return;

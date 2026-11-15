@@ -374,3 +374,4 @@ body.gamepad:has(.overlay:not(.hidden)) #hud [data-pad]::after { display: none; 
 #raidBanner button { font: 800 11px var(--font); border: 2px solid var(--ink); background: var(--paper); padding: 4px 8px; cursor: pointer; }
 .mk.ally { color: #7bc86c; }
 .card.news.siege { background: #ffe1d6; }
+.route-box { border: 2px dashed var(--ink); padding: 6px 8px; background: #e3f4f6; font: 600 12px/1.35 var(--font); }

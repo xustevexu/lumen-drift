@@ -141,6 +141,11 @@ Modules per ship (independent levels 0–3): Engine, Cargo Pod, Barrier, Beam, M
 - Absent → auto-resolve p = def/(def+att), def = 40 + 28×defenders (outpost: 15 + 35×turrets + 25×militia), att = total raiders×(18+5×rank) + 120 + 40×rank. Docked in-system → waits until you undock. Leaving mid-battle → auto-resolve; reload → restarts from the current wave.
 - HUD banner countdown on the day + SET COURSE; ⚔ on the galaxy chart; Siege Warning card in Services.
 
+## 12h. Wingmen & fleet trade routes (src/fleet.js, src/ai.js)
+- Wingmen (`state.wingmen`): hired in the Shipyard from 2–3 daily recruits per station (Rookie ◈1,500 + ◈120/day, Veteran ◈4,500 + ◈260/day, Ace ◈10,000 + ◈480/day). Max 1 + (rank≥2) + (rank≥4). Promotions at 5 / 14 kills raise stats. Unpaid wages → they quit at the day roll.
+- Behaviour: white Kestrels flying a formation beside/ahead of the leader (FORMATION slots scaled by hull length), match cruise, teleport-catch-up beyond 6 km, respawn around you after jumps/undocking, despawn while docked. Engage your target or the nearest outlaw near you (prefers whoever is shooting at you) using the shared `dogfight()` AI (also used by siege militia). Kills drop half a bounty crate and count for the local faction. Shot down → pilot recovered, out for 2 days.
+- Trade routes (`ship.route`): any non-active ship, assigned from the station you're docked at to a system ≤3 jumps away (route picker shows estimates from intel). Each leg takes max(1, jumps) days; on arrival the crew buys the best-margin good at the origin and sells at the destination through the real markets (affects prices), keeps 25% of positive profit, costs ◈150/day, and refreshes destination intel. Raid risk per leg = Σ system danger × 0.45 × hull factor (Wren 1.2, Mule 1, Kestrel 0.6, Bastion 0.3) × Ghost Transponder × Red Wake multiplier (cap 60%); a raid loses the cargo, 20% of raids disable the ship (tow fee 8% of hull price, route ends). Ships on a route can't be flown until recalled.
+
 ## 13. Completion criteria
 - Start screen loads, START enters flight.
 - Player can steer, throttle, mine an asteroid (cargo increases), dock, sell ores (credits increase), buy goods, jump to another system, sell goods there.

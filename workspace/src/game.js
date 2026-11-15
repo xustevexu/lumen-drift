@@ -17,6 +17,7 @@ import { GamepadInput } from './gamepad.js';
 import * as OM from './outpostModels.js';
 import { OutpostManager, normalizeOutpostState } from './outposts.js';
 import { SiegeManager, normalizeSiegeState } from './siege.js';
+import { FleetManager, normalizeFleetState } from './fleet.js';
 import { SectorEvents, normalizeEventState } from './events.js';
 import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
 import { RNG, clamp, damp, fmt } from './rng.js';
@@ -57,6 +58,7 @@ export class Game {
     this.events = new SectorEvents(this);
     this.outposts = new OutpostManager(this);
     this.siege = new SiegeManager(this);
+    this.fleet = new FleetManager(this);
     window.addEventListener('resize', () => this.resize());
     this.resize();
 
@@ -67,7 +69,7 @@ export class Game {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveOnLeave(); });
     window.addEventListener('pagehide', saveOnLeave);
     this.state = saved || newState(params.get('seed') ? Number(params.get('seed')) : Math.floor(Math.random() * 1e9));
-    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state); normalizeSiegeState(this.state);
+    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state); normalizeSiegeState(this.state); normalizeFleetState(this.state);
     this.hasSave = !!saved;
     this.applyQuality(this.state.quality);
 
@@ -148,7 +150,7 @@ export class Game {
     if (fresh) {
       clearAuto();
       const seed = Math.floor(Math.random() * 1e9);
-      this.state = normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed))))));
+      this.state = normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed)))))));
       this.galaxy = generateGalaxy(seed);
       this.economy = new Economy(this.galaxy, this.state);
       this.state.systemId = this.galaxy.startId;
@@ -236,6 +238,7 @@ export class Game {
     this.events.onEnterSystem();
     this.outposts.onEnterSystem();
     this.siege.onEnterSystem();
+    this.fleet.spawnAll();
     if (!initial) this.ui.toast(`${sys.name} · ${ECONOMIES[sys.eco].name} system`, 'info', 3.5);
     this.ui.onSystemChanged();
   }
@@ -489,6 +492,7 @@ export class Game {
   }
 
   destroyShip(ship, attacker) {
+    if (ship.isWingman) { this.fx.explosion(ship.pos.clone(), ship.radius / 6, 0xffb060); ship.remove(); this.fleet.onDown(ship); return; }
     if (ship.isSiegeProxy) { ship.remove(); this.siege.onProxyDestroyed(); return; }
     if (ship.isOutpost) { ship.remove(); this.outposts.onProxyDestroyed(ship); return; }
     if (ship.isBase) { if (ship.beam) ship.beam.visible = false; if (this.target === ship) this.target = null; ship.remove(); this.events.onBaseDestroyed(ship, attacker); return; }
@@ -504,6 +508,12 @@ export class Game {
         this.state.stats.kills++;
         this.factionChange(ship.faction, -3);
         this.ui.toast(`${ship.name} destroyed. ${FACTIONS[ship.faction].short} standing −3`, 'warn', 3);
+      } else if (attacker && attacker.isWingman && !ship.faction) {
+        const half = Math.round((350 + pilotRank(this.state) * 200) / 2);
+        this.fx.dropCrate(ship.pos, {}, half); this.state.stats.kills++;
+        this.fleet.onKill(attacker);
+        this.ui.toast(`${attacker.name.split(' ')[0]} splashed ${ship.name}! Bounty crate (◈ ${fmt(half)})`, 'good', 3);
+        this.factionChange(this.sysInfo.eco, 1, true); this.factionChange('pirate', -1, true);
       } else if (attacker === this.player) {
         const rank = pilotRank(this.state);
         const bounty = 350 + rank * 200;
@@ -604,6 +614,7 @@ export class Game {
     this.economy.recordIntel(sid);
     this.audio.play('warp', { vol: 0.5, rate: 0.7 });
     this.deliverAtStation();
+    this.fleet.despawnAll();
     this.save();
     this.ui.openStation();
   }
@@ -613,11 +624,14 @@ export class Game {
     this.player.pos.copy(s).addScaledVector(out, 240);
     this.player.yaw = Math.atan2(out.x, out.z); this.player.pitch = 0; this.player.speed = 20; this.input.throttle = 0.35;
     this.ui.closeStation();
+    this.fleet.spawnAll();
     this.save();
   }
 
   switchShip(uid) {
     if (uid === this.state.active) return true;
+    const tgt = this.state.ships.find((s) => s.uid === uid);
+    if (tgt && tgt.route) { this.ui.toast('That ship is running a trade route: recall it first (Shipyard)', 'warn', 3.5); return false; }
     if (this.missionsAboard().length) {
       this.ui.toast('Contract cargo or passengers are aboard — deliver or abandon those contracts before switching ships', 'warn', 4);
       return false;
@@ -645,7 +659,7 @@ export class Game {
 
   // Replace the whole career with a loaded save (slot, autosave or imported file).
   loadGame(state) {
-    this.state = normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(state)))));
+    this.state = normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(state))))));
     this.galaxy = generateGalaxy(state.seed);
     this.economy = new Economy(this.galaxy, state);
     if (state.systemId == null) state.systemId = this.galaxy.startId;
@@ -1094,6 +1108,7 @@ export class Game {
     this.events.newDay();
     this.outposts.newDay(this.state.day);
     this.siege.newDay(this.state.day);
+    this.fleet.newDay(this.state.day);
     this.ui.toast(`Day ${this.state.day} — markets updated`, 'info', 2.5);
     this.checkDeadlines();
   }
@@ -1147,6 +1162,7 @@ export class Game {
     this.events.update(dt);
     this.outposts.update(dt);
     this.siege.update(dt);
+    this.fleet.update(dt);
     // battle music when outlaws are close
     const near = this.hostilesNear(1600);
     this.audio.setMusic(near ? 'battle' : 'calm');
