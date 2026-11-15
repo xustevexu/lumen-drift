@@ -189,7 +189,7 @@ export class Story {
   // ---- new career: pick an origin, then the intro ----
   chooseOrigin(onPick) {
     const ui = this.g.ui;
-    const cards = ORIGIN_IDS.map((id) => { const o = ORIGINS[id]; return `<div class="origin"><div class="origin-pic">${portraitSVG(o.speaker, 48)}</div><div><b>${o.name}</b> <small>${o.tag}</small><p>${o.blurb}</p><p class="origin-perks">${o.perks}</p></div></div>`; }).join('');
+    const cards = ORIGIN_IDS.map((id) => { const o = ORIGINS[id]; return `<div class="origin"><div class="origin-pic"><img src="./portraits/${id}.jpg" alt="${o.name}"></div><div><b>${o.name}</b> <small>${o.tag}</small><p>${o.blurb}</p><p class="origin-perks">${o.perks}</p></div></div>`; }).join('');
     ui.dialog(`<div class="ov-title">WHO ARE YOU?</div><p>Your past decides where you start, who already knows your name, and the story that follows you.</p>${cards}`,
       [...ORIGIN_IDS.map((id) => ({ label: ORIGINS[id].name.toUpperCase(), primary: id === 'heir', fn: () => this.intro(id, onPick) })), { label: 'BACK' }]);
     document.getElementById('dialogBox').classList.add('originBox');
@@ -197,7 +197,7 @@ export class Story {
   intro(id, onPick) {
     const o = ORIGINS[id];
     const lines = o.intro.map((l, i) => `<p class="intro-line" style="animation-delay:${0.4 + i * 1.6}s">${l}</p>`).join('');
-    this.g.ui.dialog(`<div class="intro-title">${o.name.toUpperCase()}</div>${lines}`, [{ label: 'BEGIN', primary: true, fn: () => onPick(id) }]);
+    this.g.ui.dialog(`<img class="intro-pic" src="./portraits/${id}.jpg" alt=""><div class="intro-title">${o.name.toUpperCase()}</div>${lines}`, [{ label: 'BEGIN', primary: true, fn: () => onPick(id) }]);
     const box = document.getElementById('dialogBox'); box.classList.remove('originBox'); box.classList.add('introBox');
     document.getElementById('dialog').classList.add('introOv');
   }
