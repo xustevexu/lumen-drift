@@ -1134,7 +1134,7 @@ export class Game {
     // free-look offsets: ease toward the right stick, spring back to the chase view when it's released
     const fl = this.freeLook, lk = this.lookOff;
     const held = Math.abs(fl.x) + Math.abs(fl.y) > 0;
-    lk.yaw = damp(lk.yaw, fl.x * Math.PI * 0.95, held ? 7 : 4, dt);
+    lk.yaw = damp(lk.yaw, -fl.x * Math.PI * 0.95, held ? 7 : 4, dt); // stick right → look right
     lk.pitch = damp(lk.pitch, fl.y * 1.15, held ? 7 : 4, dt);
     if (this.mode === 'menu') {
       const t = this.time * 0.08; const R = HULLS[p.hullId].cam * 1.6;
