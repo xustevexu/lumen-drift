@@ -244,3 +244,10 @@ Endings (permanent): **Lantern Captain** (keep it: fuel ×0.15 everywhere, +◈1
 
 ## 12r. Multi-jump courses (game.js setCourse/followCourse)
 `state.course = { sys, name, then }` survives jumps. Every SET COURSE (map, contracts, story, cantina, outposts, sieges) goes through `setCourse`; after each jump autopilot re-aims at the next gate, and on arrival it flies to the final target (`then`: station, mission, outpost or siege). The next gate's marker pulses orange ("▶ NEXT JUMP: X → destination") and stays pinned to the screen edge; the galaxy map draws the route as an orange dashed line with a ring on the destination; the HUD chip shows the course even when autopilot is off (✕ once stops autopilot, again clears the course).
+
+## 12s. Exodus Logs: keyed and contested
+- Every charted system now has 2–3 Lantern wrecks (extra ones appended with their own RNG so saved anomaly keys never shift). Many are stripped: a wreck yields a log with 40% / 70% / 100% chance after 0 / 1 / 2 dry searches (`explore.dry`). With no log aboard the logs are "keyed" and silent: the first log is luck (30%, guaranteed by the 4th wreck). A safety net guarantees logs never run out before wrecks do. Typical: ~2 wrecks per log.
+- Stripped wrecks still pay salvage and show Red Wake tags (gold-hook marks of Marrow's crews in the Debtor's story once Marrow takes over). Wick explains the first time.
+- Log recoveries make headlines (1st, 3rd, 5th, the gate waking), which count as deeds for Kade, who mentions the logs when he first meets you.
+- Story ties: Ama (Heir ch1) explains the keying and the scavengers; Solak's ch3 call says the Institute found only scrap in fifty years; Marrow's ledger (Debtor ch4) shows years of payments for Lantern salvage; Solak notices any logs aboard in the Deserter's ch2.
+- Gamepad: expandable rows (Exodus Log entries) are now in the controller's focus list; A opens/closes them.

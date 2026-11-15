@@ -143,7 +143,7 @@ export class ArcManager {
     } else if (a.ch === 2 && sid === a.target) {
       ui.dialog(this.scene('solak', 'Static', `<p>Dr. Solak's lab smells of solder and cold tea. He plugs the key into a relay older than both of you.</p>
         <p>"Ah. Oh dear. These are Patrol standing orders. Repositioning windows, and every one matches a Red Wake raid on a Fringe colony. Somebody inside the Patrol is telling the Wake when the sky is empty."</p>
-        <p>"There's no name, only a logistics code. And, pilot? The moment I opened this, it pinged something. Somebody knows."</p>`),
+        <p>"There's no name, only a logistics code. And, pilot? The moment I opened this, it pinged something. Somebody knows."</p>${s.explore.lore > 0 ? `<p>He glances at your manifest and goes very still. "Is that... an Exodus Log? ${s.explore.lore > 1 ? `${s.explore.lore} of them?` : ''} Nobody finds those. Later. One impossible thing at a time."</p>` : ''}`),
       [{ label: 'THEN WE MOVE FAST', primary: true, fn: () => { g.addCredits(1500); g.ui.toast('Dr. Solak pays for a copy of the data: +◈1,500', 'good', 3); this.next(3, 0); } }]);
     } else if (a.ch === 4 && !isAccordEco(eco)) {
       this.vexScene();

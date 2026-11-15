@@ -172,7 +172,7 @@ export class GamepadInput {
     return { start: $('start').querySelector('.start-actions'), dialog: $('dialogBox'), pause: $('pause').querySelector('.dialog'), station: $('station') }[ctx];
   }
   buttons(root) {
-    return [...root.querySelectorAll('button')].filter((b) => !b.disabled && b.offsetParent !== null && b.getClientRects().length);
+    return [...root.querySelectorAll('button, summary')].filter((b) => !b.disabled && b.offsetParent !== null && b.getClientRects().length);
   }
   setFocus(el) {
     if (this.focusEl && this.focusEl !== el) this.focusEl.classList.remove('gp-focus');

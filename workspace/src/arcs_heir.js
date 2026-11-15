@@ -36,7 +36,7 @@ export class HeirArc {
     }
     // progress-based chapters: they finish through ordinary exploration
     if (a.ch === 2 && this.ex.lore >= LOGS_CH2) {
-      m.comm('ama', `${this.ex.lore} logs. Do you hear it? Every one is a breadcrumb the Fleet left for us. Others are listening too, child. Be careful who you tell.`, 'good');
+      m.comm('ama', `${this.ex.lore} logs. Do you hear how they hum together now? The more you carry, the louder the others answer. And the louder you are, the more people notice, child. Be careful who you tell.`, 'good');
       m.next(3, 1);
     } else if (a.ch === 4 && a.flags.spawned && g.outlaws.filter((o) => o.storyOf && !o.dead).length === 0) {
       a.flags.armed = false; g.addCredits(2500);
@@ -59,10 +59,10 @@ export class HeirArc {
       m.comm('ama', `Your grandmother wrote to me before she died. There is something you must hear, and not over an open channel. Come to ${m.sysName(t)}.`);
       m.setGoal(`Meet Elder Ama at ${m.sysName(t)} station (Free Settlers).`, t);
     } else if (a.ch === 2) {
-      m.setGoal(`Recover Exodus Logs from Lantern Fleet wrecks: ${this.ex.lore}/${LOGS_CH2}. Your sensors find wrecks up close; scanner probes chart a whole system.`, null);
+      m.setGoal(`Recover Exodus Logs from Lantern Fleet wrecks: ${this.ex.lore}/${LOGS_CH2}. Scavengers have stripped many wrecks, so keep searching. Probes chart a whole system's anomalies.`, null);
     } else if (a.ch === 3) {
       const t = m.nearest((x) => x.eco === 'hightech');
-      m.comm('solak', `Three Exodus Logs! In one pair of hands! Forgive me, pilot, I've waited my whole career for this. Please come to the Institute at ${m.sysName(t)}. I'll make it worth your while.`);
+      m.comm('solak', `Three Exodus Logs! The Institute has scanned those wreck fields for fifty years and found nothing but scrap. Your grandmother's log makes them answer. Do you understand what you're carrying? Please come to the Institute at ${m.sysName(t)}.`);
       m.setGoal(`Visit Dr. Solak at ${m.sysName(t)} station (Lumen Institute).`, t);
     } else if (a.ch === 4) {
       m.setGoal("Someone has been tracking your log recoveries. Expect company in the next system you enter.", null);
@@ -75,7 +75,7 @@ export class HeirArc {
   }
   goalText() {
     const a = this.a;
-    if (a.ch === 2 && a.stage === 'go') return `Recover Exodus Logs from Lantern Fleet wrecks: ${this.ex.lore}/${LOGS_CH2}. Your sensors find wrecks up close; scanner probes chart a whole system.`;
+    if (a.ch === 2 && a.stage === 'go') return `Recover Exodus Logs from Lantern Fleet wrecks: ${this.ex.lore}/${LOGS_CH2}. Scavengers have stripped many wrecks, so keep searching. Probes chart a whole system's anomalies.`;
     if (a.ch === 5 && a.stage === 'go' && !this.ex.unlocked) return `Recover Exodus Logs until the dormant gate wakes: ${this.ex.lore}/${FRAGMENTS_TO_UNLOCK}.`;
     return null;
   }
@@ -86,7 +86,7 @@ export class HeirArc {
       a.flags.spawned = false;
       if (!initial && a.flags.armed) setTimeout(() => this.m.spawnSquad({ n: 3, name: 'Wake Scavenger', tough: 1.1, color: 0xff6a4a,
         toast: '⚠ Red Wake scavengers dropped out of warp, right on your log trail.',
-        speaker: 'wick', line: "Red Wake scavengers. They've been shadowing our log recoveries. Old Lantern salvage on their hulls, too: these people have been at this for generations." }), 2500);
+        speaker: 'wick', line: "Red Wake scavengers. They've been shadowing our log recoveries: they've picked these wrecks for generations and never heard one answer. We have. Old Lantern salvage on their hulls, too: these people have been at this for generations." }), 2500);
     }
   }
 
@@ -95,7 +95,8 @@ export class HeirArc {
     if (a.ch === 1 && sid === a.target) {
       g.ui.dialog(m.scene('ama', 'Inheritance', `<p>Elder Ama takes both your hands. Her grip is stronger than you expected.</p>
         <p>"The Fleet's chief engineer was an Oyelaran: my ancestor. She built the gate that hid the Halcyon. And the Halcyon's captain was <b>Ilse Varga</b>. Your grandmother's grandmother, many times over."</p>
-        <p>"The logs are the key to that gate. You already hold one. Find the others. The Fleet left them in its wrecks, like breadcrumbs."</p>
+        <p>"The logs are the key to that gate, and to each other. Without one aboard, a Lantern wreck reads as scrap to any sensor. People have hunted them for three hundred years and found nothing. You already hold one, so the others will answer you."</p>
+        <p>"The Red Wake has been picking over the Fleet's trail just as long. Some wrecks will be stripped before you reach them. Keep looking."</p>
         <p>She presses two scanner probes into your hands. "These were my mother's. Use them well."</p>`),
       [{ label: "I'LL FOLLOW THE BREADCRUMBS", primary: true, fn: () => { this.ex.probes = Math.min(5, this.ex.probes + 2); g.factionChange('frontier', 3); m.next(2, 0); } }]);
     } else if (a.ch === 3 && sid === a.target) {

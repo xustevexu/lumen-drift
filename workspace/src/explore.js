@@ -45,6 +45,7 @@ export function normalizeExploreState(state) {
   for (const k of ['done', 'seen', 'cleared']) if (!e[k] || typeof e[k] !== 'object') e[k] = {};
   if (!Number.isFinite(e.lore)) e.lore = 0;
   e.unlocked = !!e.unlocked; e.heart = !!e.heart;
+  if (!Number.isFinite(e.dry)) e.dry = 0; // wrecks searched since the last log
   return state;
 }
 export function anomaliesFor(galaxy, sysId) {
@@ -55,6 +56,9 @@ export function anomaliesFor(galaxy, sysId) {
   list.push(mk('wreck'));
   const extra = 1 + (rng.next() < 0.6 ? 1 : 0);
   for (let i = 0; i < extra; i++) list.push(mk(rng.weighted({ pocket: 3, beacon: 2, rift: 2, sentinel: sys.eco === 'frontier' ? 3 : 1.5 })));
+  // more Lantern wrecks (many already stripped by scavengers); appended so older saves keep their keys
+  const wr = new RNG(sys.seed + 7171), more = 1 + (wr.next() < 0.5 ? 1 : 0);
+  for (let i = 0; i < more; i++) list.push({ key: `${sysId}:${list.length}`, type: 'wreck', seed: wr.int(1, 1e9), a: wr.range(0, Math.PI * 2), r: wr.range(3200, 8400), y: wr.range(-250, 250) });
   return list;
 }
 export function systemExploreStatus(state, galaxy, sysId) {
@@ -242,9 +246,25 @@ export class ExploreManager {
     g.audio.loop('mine', 'mine', true, 0.25, 0.5);
     if (this.hold.t >= HOLD_TIME) { this.hold = null; g.mineBeam.visible = false; g.audio.loop('mine', 'mine', false); g.input.mine = false; this.resolve(act.key); }
   }
+  // the logs are keyed to each other: with none aboard a Lantern wreck reads as scrap, which is why nobody
+  // has found them in 300 years. Your first log is luck; after that each one helps the next answer.
+  logFound(rng) {
+    const ex = this.ex, dry = ex.dry || 0, gx = this.g.galaxy;
+    // safety net: never let the unsearched wrecks run out before the logs do
+    let left = 0; for (const sy of gx.systems) if (!sy.hidden) for (const a of anomaliesFor(gx, sy.id)) if (a.type === 'wreck' && !ex.done[a.key]) left++;
+    if (left < CHARTED_LORE - ex.lore) return true;
+    if (ex.lore === 0) return dry >= 3 || rng.next() < 0.3;
+    return dry >= 2 || rng.next() < (dry === 0 ? 0.4 : 0.7);
+  }
+  logNews(n) {
+    const p3 = this.g.p3, cs = this.state.p3 && this.state.p3.callsign; if (!p3 || !cs) return;
+    if (n === 1) p3.headline(`Independent pilot ${cs} recovers a lost Lantern Fleet log. The Lumen Institute calls it "very interesting".`);
+    else if (n === 3) p3.headline(`${cs} now holds three Exodus Logs, more than the Lumen Institute has recovered in fifty years.`);
+    else if (n === 5) p3.headline(`Lantern-hunters swarm the Fringe after ${cs}'s fifth Exodus Log. Nobody else has found one.`);
+  }
   dormantDialog() {
     const n = this.ex.lore;
-    this.g.ui.dialog(`<div class="ov-title">DORMANT GATE</div><p>A jump gate that appears on no chart. Its ring is cold and its portal dark, but something inside hums when your sensors touch it.</p><p>Exodus Logs recovered: <b>${n}/${FRAGMENTS_TO_UNLOCK}</b> needed to wake it. Fragments lie in Lantern Fleet wrecks, one hidden in each charted system.</p>`, [{ label: 'CLOSE', primary: true }]);
+    this.g.ui.dialog(`<div class="ov-title">DORMANT GATE</div><p>A jump gate that appears on no chart. Its ring is cold and its portal dark, but something inside hums when your sensors touch it.</p><p>Exodus Logs recovered: <b>${n}/${FRAGMENTS_TO_UNLOCK}</b> needed to wake it. Logs lie in Lantern Fleet wrecks across the charted systems, though scavengers have stripped many. Once you carry a log, the others answer it.</p>`, [{ label: 'CLOSE', primary: true }]);
   }
   resolve(key) {
     const g = this.g, s = this.state, ex = this.ex, r = this.rt.get(key); if (!r) return;
@@ -257,8 +277,17 @@ export class ExploreManager {
     if (a.type === 'wreck') {
       const cr = 300 + rng.int(0, 500) + rank * 100; g.addCredits(cr);
       blueprintDrop(g, 0.1, 'wreck');
-      if (ex.lore < CHARTED_LORE) { const idx = ex.lore++; this.showLog(idx, `Salvaged ◈${fmt(cr)} from the wreck.`); this.checkUnlock(); }
-      else g.ui.toast(`Salvaged ◈${fmt(cr)}. The log core was already wiped.`, 'good', 4);
+      if (ex.lore < CHARTED_LORE && this.logFound(rng)) {
+        const idx = ex.lore++; ex.dry = 0;
+        this.showLog(idx, `Salvaged ◈${fmt(cr)} from the wreck.${idx === 0 ? ' The core is cold... then it wakes. You have the feeling it was waiting for someone.' : idx === 1 ? ' Your first log hummed as you closed in. The logs answer each other.' : ''}`);
+        this.logNews(ex.lore); this.checkUnlock();
+      } else {
+        ex.dry++;
+        const marrow = s.story && s.story.origin === 'debtor' && s.story.arc && s.story.arc.ch >= 2;
+        const mark = marrow ? "gold-hook marks: Marrow's salvage crews" : 'Red Wake tags scratched into the hull';
+        g.ui.toast(ex.lore >= CHARTED_LORE ? `Salvaged ◈${fmt(cr)}. The log core was already wiped.` : `Salvaged ◈${fmt(cr)}, but scavengers got here first: the log core is gone. ${mark[0].toUpperCase() + mark.slice(1)}.`, 'good', 6);
+        if (ex.lore < CHARTED_LORE && !s.story.said['tip-stripped']) { s.story.said['tip-stripped'] = 1; setTimeout(() => g.story.comm('wick', "Stripped. The Red Wake has picked over the Lantern trail for three hundred years. Not every wreck still has its log; we'll have to keep looking."), 1500); }
+      }
     } else if (a.type === 'pocket') {
       const lum = giveCargo('lumenite', rng.int(6, 12)), cob = giveCargo('cobalt', rng.int(8, 16));
       g.ui.toast(`✦ Crystal pocket cracked: ${lum} Lumenite${cob ? ` + ${cob} Cobaltine` : ''}${lum + cob === 0 ? ' (hold full: ore lost!)' : ''}`, 'good', 5);
@@ -295,6 +324,7 @@ export class ExploreManager {
     applyUnlocks(g.galaxy, this.state); clearSystemCache();
     const host = g.galaxy.systems[g.galaxy.hostId];
     setTimeout(() => g.ui.toast(`✧ The logs resolve into a signal. The dormant gate in ${host.name} is waking: a new route to Lumen's Rest is on your chart.`, 'good', 9), 600);
+    if (g.p3 && this.state.p3) g.p3.headline(`An uncharted jump gate has woken in ${host.name}. Sources say ${this.state.p3.callsign} opened it.`);
     if (this.state.systemId === host.id) { g.save(); g.enterSystem(host.id, null, true); }
   }
 

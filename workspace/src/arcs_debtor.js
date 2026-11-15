@@ -105,6 +105,7 @@ export class DebtorArc {
     } else if (a.ch === 4 && !isAccordEco(eco)) {
       g.ui.dialog(m.scene('vex', 'Two Offers', `<p>Vex reads the ledger index over your shoulder and goes quiet.</p>
         <p>"Forty Accord officials. Patrol, customs, two station governors. This is how Marrow plans to win: he doesn't fight the Accord, he owns it."</p>
+        <p>She taps another column. "And this. Payments for Lantern salvage, years of it. Every stripped wreck you've ever found out there? Marrow's crews, hunting the Exodus Logs. He's never found a whole one."</p>
         <p>"Marrow wants it back. The Patrol would kill for it. And me? I want my book back. Think hard about who you trust."</p>`),
       [
         { label: 'CALL IN A FEW SMALL DEBTS (+◈4,000, Red Wake −3)', fn: () => { g.addCredits(4000); g.factionChange('pirate', -3, true); a.flags.peek = 1; m.comm('vex', 'Already spending it? Careful. That book changes people.'); m.next(5, 2); } },
