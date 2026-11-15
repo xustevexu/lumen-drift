@@ -254,6 +254,7 @@ export class GamepadInput {
   // where focus starts in each menu: never on a destructive or leave-the-screen button
   defaultFocus(ctx, root, list) {
     if (ctx === 'station') return list.find((b) => b.closest('#stBody')) || list.find((b) => b.classList.contains('tab')) || list[0];
+    if (ctx === 'dialog' && root.querySelector && (root.querySelector('.originBox, .introBox') || root.classList.contains('originBox') || root.classList.contains('introBox'))) return list.find((b) => b.classList.contains('primary')) || list[0];
     if (ctx === 'dialog') return this.backButton(list) || list.find((b) => b.classList.contains('primary')) || list[0];
     return list.find((b) => b.classList.contains('primary')) || list[0];
   }

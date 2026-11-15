@@ -1,3 +1,5 @@
+import { unlocked, isAccordEco } from './story.js';
+import { licenseNeeds, LICENSE_PRICE } from './accord.js';
 import * as THREE from 'three';
 import { COMMODITIES, COMM, ECONOMIES, HULLS, HULL_ORDER, MODULES, MODULE_ORDER, modulePrice, statLine, emptyMods, computeStats, DAY_LENGTH } from './data.js';
 import { fmt, clamp } from './rng.js';
@@ -46,8 +48,9 @@ export class UI {
     $('btnSavesStart').classList.remove('hidden');
   }
   bindStart() {
-    $('btnStart').addEventListener('click', () => { this.g.audio.unlock(); this.g.startGame(false); });
-    $('btnNew').addEventListener('click', () => { this.g.audio.unlock(); this.g.startGame(true); });
+    const newCareer = () => this.g.story.chooseOrigin((id) => this.g.startGame(true, id));
+    $('btnStart').addEventListener('click', () => { this.g.audio.unlock(); if (this.g.hasSave) this.g.startGame(false); else newCareer(); });
+    $('btnNew').addEventListener('click', () => { this.g.audio.unlock(); newCareer(); });
     $('btnSavesStart').addEventListener('click', () => { this.g.audio.unlock(); this.openSaves('start'); });
   }
   enterPlay() {
@@ -57,6 +60,7 @@ export class UI {
     this.onSystemChanged();
   }
 
+  storyOk() { return $('dialog').classList.contains('hidden') && $('pause').classList.contains('hidden'); }
   modalOpen() { return !$('station').classList.contains('hidden') || !$('mapOv').classList.contains('hidden') || !$('pause').classList.contains('hidden') || !$('dialog').classList.contains('hidden'); }
 
   // ------------------------------------------------------------ input
@@ -167,7 +171,7 @@ export class UI {
   warpFlash(on) { $('warpFlash').classList.toggle('on', on); }
   onSystemChanged() {
     const s = this.g.sysInfo; if (!s) return;
-    $('sysName').textContent = s.name; $('sysEco').textContent = `${ECONOMIES[s.eco].name} · ${FACTIONS[s.eco].short} · risk ${Math.round(s.danger * 100)}%`;
+    $('sysName').textContent = s.name; $('sysEco').textContent = `${isAccordEco(s.eco) ? 'ACCORD' : 'FRINGE'} · ${ECONOMIES[s.eco].name} · ${FACTIONS[s.eco].short} · risk ${Math.round(s.danger * (isAccordEco(s.eco) ? 55 : 115))}%`;
     if (this.mapView) this.resetMapView('system');
   }
 
@@ -305,6 +309,7 @@ export class UI {
     for (const m of g.outposts.markers()) list.push(m);
     for (const m of g.explore.markers()) list.push(m);
     for (const a of g.fleet.wings) if (!a.dead && a.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${a.uid}`, pos: a.pos, cls: 'ally', name: a.name.split(' ')[0] });
+    for (const m of g.accord.markers()) list.push(m);
     for (const a of g.siege.allies) if (!a.dead && a.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${a.uid}`, pos: a.pos, cls: 'ally', name: a.name });
     W.deposits.forEach((d, i) => { if (d.pos.distanceTo(p.pos) < 5000 && d.amount > 0) list.push({ key: `dep${i}`, pos: d.pos, cls: 'deposit', name: `◆ ${COMM[d.ore].name} deposit` }); });
     W.derelicts.forEach((d, i) => { if (!d.occupied && d.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `der${i}`, pos: d.pos, cls: 'derelict', name: d.name }); });
@@ -503,7 +508,7 @@ export class UI {
   }
 
   dialog(html, buttons) {
-    const box = $('dialogBox'); box.classList.remove('saves', 'outpostBox'); if (this.g.outposts) this.g.outposts.panel = null; box.innerHTML = html;
+    const box = $('dialogBox'); box.classList.remove('saves', 'outpostBox', 'originBox', 'introBox'); $('dialog').classList.remove('introOv'); if (this.g.outposts) this.g.outposts.panel = null; box.innerHTML = html;
     for (const b of buttons) {
       const el = document.createElement('button'); el.className = `pbtn ${b.primary ? 'primary' : 'secondary'}`; el.textContent = b.label;
       el.addEventListener('click', () => { $('dialog').classList.add('hidden'); this.g.audio.play('click', { vol: 0.4 }); b.fn && b.fn(); });
@@ -609,9 +614,9 @@ export class UI {
     return h + '</div>';
   }
   outfitHTML() {
-    const g = this.g, rec = g.activeShipRec(), fab = hasFabricator(g.sysInfo.eco);
+    const g = this.g, rec = g.activeShipRec(), fab = hasFabricator(g.sysInfo.eco), U = (k) => unlocked(g.state, k);
     let h = `<p style="margin:2px 4px 10px;font:700 13px var(--font)">Upgrading: <b>${HULLS[rec.hull].name}</b> (${HULLS[rec.hull].cls}) — each ship keeps its own modules.</p><div class="cards">`;
-    h = this.factionTechHTML(rec) + this.fabricationHTML(rec, fab) + h;
+    h = (U('factions') ? this.factionTechHTML(rec) : '') + (U('fabrication') ? this.fabricationHTML(rec, fab) : '') + h;
     for (const k of MODULE_ORDER) {
       const M = MODULES[k], lvl = rec.mods[k];
       const next = lvl < 3 ? lvl + 1 : null;
@@ -620,7 +625,7 @@ export class UI {
       h += `<div class="card"><h3>${M.name}<span class="lvl">${stamps}</span></h3><p>${M.desc}</p>
         <div class="delta">${statLine(k, lvl, rec.hull)}${next ? ` → <b>${statLine(k, next, rec.hull)}</b>` : ' · MAX'}</div>
         ${next ? `<button class="pbtn ${g.state.credits >= price ? 'primary' : 'secondary'}" style="font-size:14px;padding:9px" data-act="upgrade" data-arg="${k}" ${g.state.credits >= price ? '' : 'disabled'}>INSTALL MK${next} · ◈ ${fmt(price)}</button>` : '<button class="pbtn secondary" disabled>FULLY UPGRADED</button>'}
-        ${next && fab ? (() => { const mats = moduleMats(next), fc = Math.round(price * 0.45 / 10) * 10, ok = haveMats(g.player.cargo, mats) && g.state.credits >= fc; return `<button class="pbtn secondary" style="font-size:12px;padding:7px" data-act="fabmod" data-arg="${k}" ${ok ? '' : 'disabled'}>FABRICATE · ◈ ${fmt(fc)} + ${matsText(mats)}</button>`; })() : ''}
+        ${next && fab && U('fabrication') ? (() => { const mats = moduleMats(next), fc = Math.round(price * 0.45 / 10) * 10, ok = haveMats(g.player.cargo, mats) && g.state.credits >= fc; return `<button class="pbtn secondary" style="font-size:12px;padding:7px" data-act="fabmod" data-arg="${k}" ${ok ? '' : 'disabled'}>FABRICATE · ◈ ${fmt(fc)} + ${matsText(mats)}</button>`; })() : ''}
       </div>`;
     }
     return h + '</div>';
@@ -640,12 +645,12 @@ export class UI {
         else if (o.route) {
           const R = o.route, A = g.galaxy.systems[R.a].name, B = g.galaxy.systems[R.b].name;
           btns += `<div class="route-box"><b>⛴ ROUTE ${A} ⇄ ${B}</b><br><small>${R.leg === 0 ? `→ ${B}` : `→ ${A}`} · day ${R.progress + 1}/${R.legDays} · ${R.trips} round trip${R.trips === 1 ? '' : 's'} · net ◈${fmt(R.earned)}${R.last ? `<br>Last: ${R.last}` : ''}</small><br><button class="sbtn" data-act="recall" data-arg="${o.uid}">RECALL TO HANGAR</button></div>`;
-        } else btns += `<button class="pbtn secondary" data-act="switch" data-arg="${o.uid}">FLY THIS ${H.name.toUpperCase()}${used ? ` · hold ${used}` : ''}</button><button class="pbtn secondary" style="font-size:13px;padding:8px" data-act="route" data-arg="${o.uid}">ASSIGN TRADE ROUTE FROM HERE</button>`;
+        } else btns += `<button class="pbtn secondary" data-act="switch" data-arg="${o.uid}">FLY THIS ${H.name.toUpperCase()}${used ? ` · hold ${used}` : ''}</button>${unlocked(s, 'fleet') ? `<button class="pbtn secondary" style="font-size:13px;padding:8px" data-act="route" data-arg="${o.uid}">ASSIGN TRADE ROUTE FROM HERE</button>` : ''}`;
       }
       if (H.price > 0) btns += `<button class="pbtn ${s.credits >= H.price ? 'primary' : 'secondary'}" style="font-size:14px;padding:9px" data-act="buyship" data-arg="${hid}" ${s.credits >= H.price ? '' : 'disabled'}>BUY · ◈ ${fmt(H.price)}</button>`;
       h += `<div class="card ${owned.some((o) => o.uid === s.active) ? 'active' : ''}"><h3>${H.name}<span class="cls">${H.cls.toUpperCase()}</span></h3><p>${H.desc}</p>${stats}${btns}</div>`;
     }
-    return this.wingmenHTML() + h + '</div>';
+    return (unlocked(s, 'fleet') ? this.wingmenHTML() : '') + h + '</div>';
   }
 
   wingmenHTML() {
@@ -675,6 +680,16 @@ export class UI {
       } })), { label: 'CANCEL' }]);
   }
   repairCost() { const p = this.g.player; return Math.ceil(Math.ceil(p.maxHp - p.hp) * 1.5 * HULLS[p.hullId].priceMul * (1 + factionTier(standingWith(this.g.state, this.g.sysInfo.eco)).repair)); }
+  accordHTML() {
+    const g = this.g, s = g.state, here = isAccordEco(g.sysInfo.eco);
+    if (s.accord.licensed) return `<div class="card news"><div><h3>🛡 Accord Pilot License</h3><p><b>Licensed.</b> No docking tariffs or routine cargo scans in Accord space${here ? ', and the Patrol here flies for you too' : ''}.</p></div></div>`;
+    if (!unlocked(s, 'factions') && !here) return '';
+    const n = licenseNeeds(s), ok = n.ok && here;
+    const why = !here ? 'APPLY AT AN ACCORD STATION' : n.friendly < n.need ? `NEEDS FRIENDLY WITH ${n.need} ACCORD FACTIONS (${n.friendly}/${n.need})` : s.credits < LICENSE_PRICE ? `◈ ${fmt(LICENSE_PRICE)}` : '';
+    return `<div class="card news"><div><h3>🛡 Accord Pilot License</h3><p>${here ? 'This is Accord space: patrolled, safer, and taxed. Unlicensed pilots pay a docking tariff (4% of cargo, min ◈50) and face cargo scans; hot cargo counts as contraband.' : 'The Accord core (Agricultural, Industrial and High-Tech systems) is patrolled and safer, but taxes unlicensed pilots.'} A license ends the tariff and the scans.</p>
+      <p>Requires ◈${fmt(LICENSE_PRICE)} and <b>Friendly</b> standing with ${n.need === 3 ? 'all three' : 'two of the three'} Accord factions (Institute, Combine, Cooperative)${n.deserter ? '. The Patrol has a long memory: deserters need all three.' : '.'}</p>
+      <p><button class="sbtn buy" data-act="license" ${ok ? '' : 'disabled'}>${why || `BUY LICENSE · ◈ ${fmt(LICENSE_PRICE)}`}</button></p></div></div>`;
+  }
   siegeHTML() {
     const g = this.g, A = g.state.siege.active; if (!A || A.phase === 'done') return '';
     const here = A.target.type === 'station' && A.target.sys === g.state.systemId;
@@ -722,16 +737,18 @@ export class UI {
     const expiring = liveEvents(s).filter((e) => e.end === s.day && e.type !== 'market');
     const restNote = expiring.length ? `<br><b style="color:#b0451a">Ends if you rest:</b> ${expiring.map((e) => `${describe(e, g.galaxy, s).title} in ${g.galaxy.systems[e.sys].name}`).join(', ')}` : '';
     const mslNeed = p.stats.mslCap - p.missiles; const mslCost = mslNeed * 60;
-    const r = pilotRank(s);
+    const r = pilotRank(s), U = (k) => unlocked(s, k);
     return `<div class="svc">
       <div class="card"><div><h3>Hull Repair</h3><p>${missing > 0 ? `${missing} damage to patch` : 'Hull is pristine'}</p></div><button class="sbtn buy" data-act="repair" ${missing > 0 && s.credits >= repair ? '' : 'disabled'}>◈ ${fmt(repair)}</button></div>
       <div class="card"><div><h3>Refuel</h3><p>${Math.floor(p.fuel)}/${p.stats.fuel} in the tank · ◈${g.fuelPrice()} a unit here (fuel is cheapest in Mining systems)</p></div><button class="sbtn buy" data-act="refuel" ${p.fuel < p.stats.fuel && s.credits >= g.fuelPrice() ? '' : 'disabled'}>◈ ${fmt(Math.ceil(p.stats.fuel - p.fuel) * g.fuelPrice())}</button></div>
       <div class="card"><div><h3>Missile Restock</h3><p>${p.stats.mslCap ? `${p.missiles}/${p.stats.mslCap} loaded · ◈60 each` : 'No missile rack installed'}</p></div><button class="sbtn buy" data-act="missiles" ${mslNeed > 0 && s.credits >= mslCost ? '' : 'disabled'}>◈ ${fmt(mslCost)}</button></div>
+      ${g.story.debtHTML()}
+      ${this.accordHTML()}
       ${this.siegeHTML()}
-      ${this.newsHTML()}
-      ${this.exploreHTML()}
-      ${this.outpostsHTML()}
-      ${this.factionsHTML()}
+      ${U('events') ? this.newsHTML() : ''}
+      ${U('exploration') ? this.exploreHTML() : ''}
+      ${U('outposts') ? this.outpostsHTML() : ''}
+      ${U('factions') ? this.factionsHTML() : ''}
       <div class="card"><div><h3>Rest Until Tomorrow</h3><p>Skip to Day ${s.day + 1}. Prices recover, rocks and deposits regrow, new events may appear.${restNote}</p></div><button class="sbtn" data-act="rest">REST</button></div>
       <div class="card"><div><h3>Pilot Record</h3><p>Rank <b>${RANK_NAMES[r]}</b> · Net worth ◈ ${fmt(netWorth(s))}<br>Mined ${s.stats.mined} · Trades ${s.stats.trades} · Contracts ${s.stats.contracts} · Outlaws downed ${s.stats.kills} · Jumps ${s.stats.jumps}</p></div></div>
       <p style="font:600 12px var(--font);opacity:.75">Outlaw raids grow from lone raiders to packs of 2–4 as your rank rises. Barriers and beams are your best insurance.</p>
@@ -740,6 +757,7 @@ export class UI {
 
   missionsHTML() {
     const g = this.g, s = g.state, p = g.player;
+    if (!unlocked(s, 'contracts')) return '<p class="ms-empty">No contracts for an unknown pilot yet. Sell some cargo to get your name on the board.</p>';
     const offers = offersFor(s, g.galaxy, s.systemId, pilotRank(s));
     const pts = standingOf(s, s.systemId), tier = standingTier(pts), nx = nextStanding(pts);
     let h = `<div class="standing"><b>Standing at ${g.world.station.name}:</b> <span class="st-tier st-${tier.level}">${tier.name.toUpperCase()}</span> <small>(${pts} pts)</small>${tier.perks ? `<br><small>${tier.perks}</small>` : ''}${nx ? `<br><small style="opacity:.75">Next: ${nx.name} at ${nx.min} pts. Completing this station's contracts earns standing (special jobs count double); failing loses it.</small>` : ''}</div>`;
@@ -789,6 +807,10 @@ export class UI {
       if (q > 0) { const cost = E.buy(sid, arg, q); s.credits -= cost; p.cargo[arg] = (p.cargo[arg] || 0) + q; s.stats.trades++; g.audio.play('click', { vol: 0.6 }); }
       else this.toast('Not enough credits or cargo space', 'warn', 2);
     } else if (act === 'refuel') { g.refuel(false);
+    } else if (act === 'paydebt') {
+      const n = g.story.payDebt(Number(arg)); if (n) { g.audio.play('coins', { vol: 0.7 }); this.toast(`Paid Vex ◈${fmt(n)}`, 'good', 2.5); g.save(); }
+    } else if (act === 'license') {
+      if (g.accord.buyLicense()) { g.audio.play('coins', { vol: 0.8 }); this.toast('✓ Accord Pilot License granted', 'good', 4); }
     } else if (act === 'probe') {
       if (g.state.explore.probes < PROBE_MAX && s.credits >= PROBE_PRICE) { s.credits -= PROBE_PRICE; g.state.explore.probes++; g.audio.play('click', { vol: 0.6 }); }
     } else if (act === 'hire') {
@@ -1128,7 +1150,7 @@ export class UI {
       const sel = this.mapSel && this.mapSel.sys === s.id;
       if (sel) { ctx.strokeStyle = '#f0703c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 22, 0, Math.PI * 2); ctx.stroke(); }
       const br = s.id === cur ? 20 : sel ? 23 : 12;
-      labels.push({ x, y, gap: br + 2, lines: [s.name, `${ECONOMIES[s.eco].name}${known ? '' : ' · ?'}`], short: [s.name], font: '900 13px "Arial Black", system-ui', font2: '700 10px system-ui', lh: 15,
+      labels.push({ x, y, gap: br + 2, lines: [s.name, `${isAccordEco(s.eco) ? '🛡 ' : ''}${ECONOMIES[s.eco].name}${known ? '' : ' · ?'}`], short: [s.name], font: '900 13px "Arial Black", system-ui', font2: '700 10px system-ui', lh: 15,
         color: sel ? '#f0703c' : '#efe6d2', color2: known ? 'rgba(239,230,210,.85)' : 'rgba(239,230,210,.5)', pri: sel ? 99 : s.id === cur ? 50 : 10, force: sel || s.id === cur,
         blocks: [{ x: x - br, y: y - br, w: br * 2, h: br * 2 }] });
     }
@@ -1228,7 +1250,7 @@ export class UI {
       const ft = factionTier(standingWith(g.state, s.eco));
       const es = systemExploreStatus(g.state, g.galaxy, s.id), exploreTxt = `<p><small>Anomalies: ${es.seen} of ${es.total} found, ${es.done} investigated</small></p>`;
       const SA = g.state.siege.active, siegeTxt = SA && SA.phase !== 'done' && SA.target.sys === s.id ? `<p style="color:#b0451a"><b>⚔ Siege:</b> ${g.siege.newsLine()}</p>` : '';
-      box.innerHTML = `<h4>${s.name}</h4><p>${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * 100)}%/day</p><p><b style="color:${FACTIONS[s.eco].color}">${FACTIONS[s.eco].name}</b> · you are <b>${ft.name}</b>${ft.level <= -1 ? ' <span style="color:#ff6b4a">(enforcers may hunt you)</span>' : ''}</p>${siegeTxt}${exploreTxt}${evs}${ms}${rows}${btn}`;
+      box.innerHTML = `<h4>${s.name}</h4><p><b>${isAccordEco(s.eco) ? '🛡 ACCORD SPACE' : 'THE FRINGE'}</b> · ${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * (isAccordEco(s.eco) ? 55 : 115))}%/day</p><p><b style="color:${FACTIONS[s.eco].color}">${FACTIONS[s.eco].name}</b> · you are <b>${ft.name}</b>${ft.level <= -1 ? ' <span style="color:#ff6b4a">(enforcers may hunt you)</span>' : ''}</p>${siegeTxt}${exploreTxt}${evs}${ms}${rows}${btn}`;
     }
   }
   mapAction(act) {

@@ -1,3 +1,4 @@
+import { unlocked } from './story.js';
 // Pirate sieges ("horde night"): the Red Wake announces an assault on a station (or one of your bigger
 // outposts) a few days ahead. Prepare — hire militia, earn faction standing, upgrade — then show up on
 // the day for three waves ending in a Dreadnought flagship. Stay away and it resolves on its own odds.
@@ -37,6 +38,7 @@ export class SiegeManager {
     const S = this.S;
     if (S.active && S.active.phase === 'done') S.active = null;
     if (S.active || day < S.next) return;
+    if (!unlocked(this.g.state, 'sieges')) return;
     const force = new URLSearchParams(location.search).get('siege');
     this.announce(day + (force ? 0 : LEAD_DAYS));
     S.next = S.active.day + 6 + Math.floor(Math.random() * 5);

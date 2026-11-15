@@ -21,6 +21,8 @@ import { SiegeManager, normalizeSiegeState } from './siege.js';
 import { FleetManager, normalizeFleetState } from './fleet.js';
 import { ExploreManager, normalizeExploreState } from './explore.js';
 import { normalizeCraftState } from './craft.js';
+import { Story, normalizeStoryState, lockAll, applyOrigin, isAccordEco } from './story.js';
+import { AccordManager, ACCORD_RAID, FRINGE_RAID } from './accord.js';
 import { SectorEvents, normalizeEventState } from './events.js';
 import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
 import { RNG, clamp, damp, fmt } from './rng.js';
@@ -64,6 +66,8 @@ export class Game {
     this.siege = new SiegeManager(this);
     this.fleet = new FleetManager(this);
     this.explore = new ExploreManager(this);
+    this.story = new Story(this);
+    this.accord = new AccordManager(this);
     window.addEventListener('resize', () => this.resize());
     this.resize();
 
@@ -74,7 +78,7 @@ export class Game {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveOnLeave(); });
     window.addEventListener('pagehide', saveOnLeave);
     this.state = saved || newState(params.get('seed') ? Number(params.get('seed')) : Math.floor(Math.random() * 1e9));
-    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state); normalizeSiegeState(this.state); normalizeFleetState(this.state); normalizeExploreState(this.state); normalizeCraftState(this.state);
+    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state); normalizeSiegeState(this.state); normalizeFleetState(this.state); normalizeExploreState(this.state); normalizeCraftState(this.state); normalizeStoryState(this.state);
     this.hasSave = !!saved;
     this.applyQuality(this.state.quality);
 
@@ -151,15 +155,16 @@ export class Game {
     if (this.fx) this.fx.particles.points.material.uniforms.uPx.value = pr * (h / 800);
   }
 
-  startGame(fresh) {
+  startGame(fresh, origin = null) {
     if (fresh) {
       clearAuto();
       const seed = Math.floor(Math.random() * 1e9);
-      this.state = normalizeCraftState(normalizeExploreState(normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed)))))))));
+      this.state = normalizeStoryState(normalizeCraftState(normalizeExploreState(normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed))))))))));
       clearSystemCache();
       this.galaxy = generateGalaxy(seed);
       this.economy = new Economy(this.galaxy, this.state);
       this.state.systemId = this.galaxy.startId;
+      if (origin) { lockAll(this.state); applyOrigin(this.state, this.galaxy, origin); }
       this.enterSystem(this.state.systemId, null, true);
     }
     this.audio.unlock();
@@ -171,7 +176,8 @@ export class Game {
     this.events.briefing();
     if (params.get('gallery')) this.showGallery();
     if (params.get('event')) setTimeout(() => this.events.force(params.get('event')), 300);
-    if (!this.state.tutorial.docked) setTimeout(() => this.ui.toast('Welcome, pilot. Mine rocks in the field or dock at the station to trade.', 'info', 6), 600);
+    if (fresh && origin) this.story.opening();
+    else if (!this.state.tutorial.docked) setTimeout(() => this.ui.toast('Welcome, pilot. Mine rocks in the field or dock at the station to trade.', 'info', 6), 600);
   }
 
   // ---------------------------------------------------------------- ships
@@ -250,6 +256,7 @@ export class Game {
     this.siege.onEnterSystem();
     this.fleet.spawnAll();
     this.explore.onEnterSystem();
+    this.accord.onEnterSystem();
     if (!initial) this.ui.toast(`${sys.name} · ${ECONOMIES[sys.eco].name} system`, 'info', 3.5);
     this.ui.onSystemChanged();
   }
@@ -318,7 +325,7 @@ export class Game {
       const force = params.get('outlaws') === '1';
       // VIPs and hot cargo aboard draw extra outlaw attention; Red Wake standing and a Ghost Transponder change how often they come
       const rw = factionTier(standingWith(this.state, 'pirate')).raid * (this.player && this.player.stats.ghost ? 0.5 : 1);
-      const danger = (this.sysInfo.danger + Math.max(0, ...this.missionsAboard().map(missionDanger))) * rw;
+      const danger = (this.sysInfo.danger + Math.max(0, ...this.missionsAboard().map(missionDanger))) * rw * (isAccordEco(this.sysInfo.eco) ? ACCORD_RAID : FRINGE_RAID);
       let hit = force || Math.random() < danger, enforcer = null;
       // hostile lawful faction: their enforcers may come for you in their own space
       const own = this.sysInfo.eco, ot = factionTier(standingWith(this.state, own));
@@ -366,6 +373,7 @@ export class Game {
     const near = entry.distanceTo(this.player.pos) < this.player.stats.sensor;
     if (opts.toast) this.ui.toast(opts.toast, 'warn', 5); else this.ui.toast(near ? `⚠ OUTLAW CONTACT — ${n > 1 ? `${n} raiders` : base} jumped in!` : `⚠ Outlaw jump signature detected in ${this.sysInfo.name}`, 'warn', 5);
     this.audio.play('alarm', { vol: 0.8 });
+    if (near && !opts.siegeOf && !opts.guardOf) setTimeout(() => this.accord.outlawTaunt(n > 1 ? `${base} α` : base, opts.faction), 2200);
   }
 
   updateOutlawSchedule() {
@@ -626,6 +634,7 @@ export class Game {
     this.economy.recordIntel(sid);
     this.audio.play('warp', { vol: 0.5, rate: 0.7 });
     this.deliverAtStation();
+    this.accord.onDock();
     this.refuel(true);
     this.fleet.despawnAll();
     this.save();
@@ -672,7 +681,7 @@ export class Game {
 
   // Replace the whole career with a loaded save (slot, autosave or imported file).
   loadGame(state) {
-    this.state = normalizeCraftState(normalizeExploreState(normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(state))))))));
+    this.state = normalizeStoryState(normalizeCraftState(normalizeExploreState(normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(state)))))))));
     clearSystemCache();
     this.galaxy = applyUnlocks(generateGalaxy(state.seed), state);
     this.economy = new Economy(this.galaxy, state);
@@ -1191,6 +1200,7 @@ export class Game {
     const simPaused = this.mode !== 'play' || this.paused || this.ui.modalOpen();
     if (this.mode === 'menu') { this.time += dt; this.player.updateVisual(dt); }
     if (!simPaused && !this.docked) this.simulate(dt);
+    if (this.mode === 'play' && !this.paused && this.ui.storyOk()) this.story.update(dt);
     else if (!simPaused && this.docked) { this.time += dt; }
     this.updateCamera(dt);
     // lights follow the play area
@@ -1229,6 +1239,8 @@ export class Game {
     this.siege.update(dt);
     this.fleet.update(dt);
     this.explore.update(dt);
+    this.accord.update(dt);
+    this.accord.updateChatter(dt);
     // battle music when outlaws are close
     const near = this.hostilesNear(1600);
     this.audio.setMusic(near ? 'battle' : 'calm');

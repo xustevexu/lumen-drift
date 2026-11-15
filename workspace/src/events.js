@@ -1,3 +1,4 @@
+import { unlocked } from './story.js';
 // Procedural sector events that interrupt the mine → trade → jump loop:
 //   distress  — a disabled trader broadcasting for help (or a pirate lure), today only
 //   vein      — a Lumenite surge in one asteroid field, today only
@@ -122,6 +123,7 @@ export class SectorEvents {
     this.sync(true);
   }
   newDay() {
+    if (!unlocked(this.state, 'events') && this.state.day < 2) return;
     const fresh = rollEvents(this.state, this.g.galaxy);
     this.announceNews(fresh);
     this.sync();
