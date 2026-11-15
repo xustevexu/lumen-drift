@@ -15,6 +15,7 @@ import { Audio } from './audio.js';
 import { UI } from './ui.js';
 import { GamepadInput } from './gamepad.js';
 import * as OM from './outpostModels.js';
+import { OutpostManager, normalizeOutpostState } from './outposts.js';
 import { SectorEvents, normalizeEventState } from './events.js';
 import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
 import { RNG, clamp, damp, fmt } from './rng.js';
@@ -53,6 +54,7 @@ export class Game {
     this.fx = new FX(this);
     this.world = new World(this);
     this.events = new SectorEvents(this);
+    this.outposts = new OutpostManager(this);
     window.addEventListener('resize', () => this.resize());
     this.resize();
 
@@ -63,7 +65,7 @@ export class Game {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveOnLeave(); });
     window.addEventListener('pagehide', saveOnLeave);
     this.state = saved || newState(params.get('seed') ? Number(params.get('seed')) : Math.floor(Math.random() * 1e9));
-    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state);
+    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state);
     this.hasSave = !!saved;
     this.applyQuality(this.state.quality);
 
@@ -144,7 +146,7 @@ export class Game {
     if (fresh) {
       clearAuto();
       const seed = Math.floor(Math.random() * 1e9);
-      this.state = normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed))));
+      this.state = normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed)))));
       this.galaxy = generateGalaxy(seed);
       this.economy = new Economy(this.galaxy, this.state);
       this.state.systemId = this.galaxy.startId;
@@ -230,6 +232,7 @@ export class Game {
     for (let i = 0; i < n; i++) this.spawnTrader(true);
     this.rollOutlaws();
     this.events.onEnterSystem();
+    this.outposts.onEnterSystem();
     if (!initial) this.ui.toast(`${sys.name} · ${ECONOMIES[sys.eco].name} system`, 'info', 3.5);
     this.ui.onSystemChanged();
   }
@@ -334,7 +337,7 @@ export class Game {
       };
       const tpl = opts.faction ? buildShipTemplate('kestrel', 'player') : this.outlawTpl || buildShipTemplate('kestrel', 'outlaw');
       const o = new Ship(this, { kind: 'outlaw', hullId: 'kestrel', palette: 'outlaw', tpl, stats, name: n > 1 ? `${base} ${['α', 'β', 'γ', 'δ'][i]}` : base });
-      o.faction = opts.faction || null;
+      o.faction = opts.faction || null; o.raidOf = opts.raidOf || null;
       o.pos.copy(entry).add(_v.set((Math.random() - 0.5) * 140, (Math.random() - 0.5) * 50, (Math.random() - 0.5) * 140));
       _v.subVectors(this.player.pos, o.pos); o.yaw = Math.atan2(_v.x, _v.z);
       o.throttle = 1; o.state = 'hunt'; o.missiles = stats.mslCap; o.mslCd = 6 + Math.random() * 6; o.retarget = 0; o.orbitDir = Math.random() < 0.5 ? 1 : -1;
@@ -386,7 +389,7 @@ export class Game {
       if (o.dead) { this.outlaws.splice(i, 1); continue; }
       if (o.static) { this.updateTurret(o, dt); continue; }
       o.retarget -= dt;
-      if (o.state !== 'flee' && (o.retarget <= 0 || !o.tgt || o.tgt.dead)) { o.tgt = o.faction ? (this.docked ? null : this.player) : this.pickOutlawTarget(o); o.retarget = 4; }
+      if (o.state !== 'flee' && (o.retarget <= 0 || !o.tgt || o.tgt.dead)) { o.tgt = o.raidOf ? (this.outposts.raidTarget(o) || (this.docked ? null : this.player)) : o.faction ? (this.docked ? null : this.player) : this.pickOutlawTarget(o); o.retarget = 4; }
       // retaliate against whoever is shooting at us
       if (o.state !== 'flee' && o.lastAttacker && !o.lastAttacker.dead && this.time - o.lastHit < 10 && !(o.lastAttacker === this.player && this.docked)) o.tgt = o.lastAttacker;
       if (o.hp < o.maxHp * 0.22 && o.state !== 'flee') { o.state = 'flee'; this.ui.toast(`${o.name} is breaking off!`, 'info', 2.5); }
@@ -481,6 +484,7 @@ export class Game {
   }
 
   destroyShip(ship, attacker) {
+    if (ship.isOutpost) { ship.remove(); this.outposts.onProxyDestroyed(ship); return; }
     if (ship.isBase) { if (ship.beam) ship.beam.visible = false; if (this.target === ship) this.target = null; ship.remove(); this.events.onBaseDestroyed(ship, attacker); return; }
     if (ship.guardOf) this.events.onGuardDown(ship);
     this.fx.explosion(ship.pos.clone(), ship.radius / 6, ship.kind === 'outlaw' ? 0xff7a40 : 0xffb060);
@@ -623,7 +627,7 @@ export class Game {
   save() {
     if (this.player && this.player.dead) return false;
     this.syncShipRec();
-    this.events.persist();
+    this.events.persist(); this.outposts.persist();
     if (this.player) { this.state.pos = this.player.pos.toArray().map((x) => Math.round(x)); this.state.yaw = this.player.yaw; }
     this.state.savedAt = Date.now();
     const ok = writeAuto(this.state);
@@ -634,7 +638,7 @@ export class Game {
 
   // Replace the whole career with a loaded save (slot, autosave or imported file).
   loadGame(state) {
-    this.state = normalizeFactionState(normalizeEventState(normalizeMissionState(state)));
+    this.state = normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(state))));
     this.galaxy = generateGalaxy(state.seed);
     this.economy = new Economy(this.galaxy, state);
     if (state.systemId == null) state.systemId = this.galaxy.startId;
@@ -695,9 +699,11 @@ export class Game {
         if (!looted || this.state.day - looted >= 3) return { type: 'salvage', label: this.salvage ? `SALVAGING ${Math.round(this.salvage.t / 3.5 * 100)}%` : 'SALVAGE', derelict: d, hold: true };
       }
     }
+    const op = this.outposts.interaction(p);
+    if (op && op.type === 'outpost') return op;
     const m = W.findMineable(p.pos, p.stats.mineRange);
     if (m) return { type: 'mine', label: m.kind === 'deposit' ? 'DRILL' : 'MINE', node: m, hold: true };
-    return null;
+    return op;
   }
 
   doAction(act) {
@@ -705,6 +711,11 @@ export class Game {
     if (act.type === 'dock') this.dock();
     else if (act.type === 'jump') this.beginJump(act.gate);
     else if (act.type === 'hail') this.ui.openTraderDialog(act.trader);
+    else if (act.type === 'outpost') this.outposts.openPanel(act.outpost);
+    else if (act.type === 'establish') {
+      this.ui.dialog(`<div class="ov-title">ESTABLISH OUTPOST?</div><p>Found an outpost at <b>${act.site.name}</b>. Site ore: <b>${COMM[act.site.ore].name}</b>${act.site.gas ? ' (gas giant: build a Gas Siphon here)' : ''}.</p><p>This uses 1 Outpost Charter (you have ${this.state.charters}).</p>`,
+        [{ label: 'ESTABLISH', primary: true, fn: () => this.outposts.establish(act.site) }, { label: 'NOT HERE' }]);
+    }
     else if (act.type === 'dropoff') { for (const m of act.missions) this.completeMission(m); this.save(); }
     else if (act.type === 'sidedrop') {
       const m = act.mission; m.side.done = true; m.pax = Math.max(1, m.pax - 1);
@@ -1074,6 +1085,7 @@ export class Game {
     this.world.onNewDay(this.state.day);
     this.rollOutlaws();
     this.events.newDay();
+    this.outposts.newDay(this.state.day);
     this.ui.toast(`Day ${this.state.day} — markets updated`, 'info', 2.5);
     this.checkDeadlines();
   }
@@ -1125,6 +1137,7 @@ export class Game {
     if (act && act.type !== 'mine' && act.type !== 'salvage' && !(act.type === 'salvage')) { this.mineBeam.visible = this.input.mine && act.type === 'salvage'; }
     this.events.updateAssist(dt, act);
     this.events.update(dt);
+    this.outposts.update(dt);
     // battle music when outlaws are close
     const near = this.hostilesNear(1600);
     this.audio.setMusic(near ? 'battle' : 'calm');

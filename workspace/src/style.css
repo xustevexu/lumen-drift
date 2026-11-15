@@ -348,3 +348,27 @@ body.gamepad:has(.overlay:not(.hidden)) #hud [data-pad]::after { display: none; 
 .fac-bar span { display: block; height: 100%; }
 .card.locked { opacity: .7; }
 .mtag.excl { background: #3fb8c8; color: #fff; }
+
+/* outposts */
+#dialogBox.outpostBox { width: min(760px, 96vw); gap: 8px; }
+.op-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 600 12px var(--font); }
+.op-stats .bad { color: #c0391b; }
+.op-raid { background: #ff6b4a; color: #fff; padding: 6px 8px; font-weight: 800 !important; border: 2px solid var(--ink); }
+.op-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.op-slot { border: 2px solid var(--ink); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; background: #fffaf0; box-shadow: 3px 3px 0 var(--ink); font: 600 12px/1.35 var(--font); }
+.op-slot.empty { background: #efe6d2; border-style: dashed; }
+.op-slot.built { background: #e3f4f6; }
+.op-slot.building { background: #fff1d6; }
+.op-slot i { opacity: .65; font-style: normal; }
+.op-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; font: 800 12px var(--font); }
+.op-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; font: 600 13px var(--font); padding: 2px 0; border-bottom: 1px solid rgba(20,24,38,.15); }
+.op-row .dot { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border: 1.5px solid var(--ink); }
+.op-mod { display: flex; gap: 10px; align-items: center; justify-content: space-between; border: 2px solid var(--ink); padding: 6px 8px; background: #fffaf0; font: 600 12px/1.35 var(--font); }
+.op-mod button { flex-shrink: 0; }
+.mk.outpost { color: #9ff0ff; }
+.mk.outpost .ic { border-radius: 2px; transform: none; }
+.mk.outpost.raid { color: #ff6b4a; }
+.mk.site { color: #c8f56a; opacity: .8; }
+#raidBanner { display: flex; align-items: center; gap: 8px; justify-content: space-between; background: #ff6b4a; color: #fff; border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 6px 8px; font: 900 13px var(--display); margin-bottom: 6px; pointer-events: auto; }
+#raidBanner.hidden { display: none; }
+#raidBanner button { font: 800 11px var(--font); border: 2px solid var(--ink); background: var(--paper); padding: 4px 8px; cursor: pointer; }

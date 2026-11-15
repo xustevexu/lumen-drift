@@ -124,6 +124,15 @@ Modules per ship (independent levels 0–3): Engine, Cargo Pod, Barrier, Beam, M
 - Unique modules (`ship.uniques`, 1 slot, 2 on Bastion, `applyUniques`): Bio-Weave Plating (hull regen), Deepcore Drill Head (+40% mining, +5 pts rare), Forge Overcharger (+25% beam), Lumen Lattice (+35% barrier, +25% regen), Drift Engine (+15% speed, cruise can't be disrupted), Ghost Transponder (raid chance ×0.5). Removal refunds 50%.
 - Debug: `?enforcers=1` forces an enforcer raid today.
 
+## 12f. Player outposts (src/outposts.js, src/outpostModels.js)
+- Outpost Charter ◈15,000 (Services tab; needs Neutral+ with the local faction). Max outposts = 1 + min(2, pilot rank). Sites: every asteroid field (outside its edge) and every planet deposit (low orbit); fly within ~220 m and press ESTABLISH OUTPOST.
+- Hub with 6 arms; each arm takes one module. Module = credits paid up front + materials delivered from the hold (DELIVER); comes online the next day. Modules: Mining Rig (18/day site ore, fields ~5% Lumenite; not on gas giants), Gas Siphon (14 Helion/day; gas giants only), Refinery (24 ore/day: Ferrite→Parts 3:1, Cobaltine→Data 2:1, Ice→Medical 2:1, Helion→Luxury 3:1), Storage (+120; hub 60), Solar (+3 power; hub 2), Habitat (+25% production), Trade Dock (sells 12 units/day at 85% local price into outpost credits), Defense Turret.
+- Power: output scales by supply/demand when underpowered. Upkeep ◈100 + ◈40/module per day from player credits (unpaid → idle that day). Every 3 days an outpost with 2+ modules gives +1 local faction standing.
+- Daily tick (`tickOutpost`) on every newDay for all outposts; panel shows reports, storage (LOAD / STORE MY ORE / COLLECT).
+- Raids: daily chance (4% + 1.2%/module) × Red Wake raid multiplier; hostile local faction adds 8% enforcer raids. Warning at a random time, then RAID_WINDOW = 0.6 day (~144 s) to arrive. In-system at arrival → live fight: raiders target an invisible proxy Ship with a barrier (hull 900, shield 300+60/turret); turrets fire at outlaws within 560 m. Proxy destroyed or not present → loss of 50% storage + outpost credits. Absent → auto-resolve with p(win) = def/(def+att), def = 15 + 35×turrets×power, att = n×(22+6×rank). Reload/jump mid-fight restarts the raid shortly.
+- HUD raid banner with countdown + SET COURSE; ⌂ markers in flight, on the system chart and galaxy chart.
+- Debug: `?gallery=1` lays out every model; `?outpostraid=1` forces a raid on the next day roll.
+
 ## 13. Completion criteria
 - Start screen loads, START enters flight.
 - Player can steer, throttle, mine an asteroid (cargo increases), dock, sell ores (credits increase), buy goods, jump to another system, sell goods there.

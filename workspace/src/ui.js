@@ -4,6 +4,7 @@ import { fmt, clamp } from './rng.js';
 import { pilotRank, netWorth, RANK_NAMES } from './economy.js';
 import { SLOT_COUNT, autoInfo, readSlot, writeSlot, summarize, exportText, exportName, parseImport, ago } from './save.js';
 import { liveEvents, describe, eventIcon } from './events.js';
+import { CHARTER_PRICE, maxOutposts, storageUsed, storageCap, builtMods } from './outposts.js';
 import { FACTIONS, FACTION_ORDER, UNIQUES, UNIQUE_BY_FACTION, factionTier, nextFactionTier, standingWith, tierPerks, uniqueSlots } from './factions.js';
 import { MAX_ACTIVE, offersFor, missionSpace, boundToShip, typeTag, modTags, destText, needText, dueText, reqMet, reqText, standingOf, standingTier, nextStanding } from './missions.js';
 
@@ -200,11 +201,25 @@ export class UI {
       } else info += ' · (Sensor Mk1 to scan cargo)';
       $('tpInfo').textContent = info;
     } else tp.classList.add('hidden');
+    this.updateRaidBanner();
     this.updateMarkers();
     this.radarT -= dt;
     if (this.radarT <= 0) { this.radarT = 0.1; this.drawRadar(); }
     this.layoutT = (this.layoutT || 0) - dt;
     if (this.layoutT <= 0) { this.layoutT = 0.25; this.layoutHudLeft(); this.layoutTopStack(); }
+  }
+
+  updateRaidBanner() {
+    let el = $('raidBanner');
+    if (!el) {
+      el = document.createElement('div'); el.id = 'raidBanner'; el.className = 'hidden';
+      el.innerHTML = '<span></span><button>SET COURSE</button>';
+      el.querySelector('button').addEventListener('click', () => { const u = this.g.outposts.urgent(); if (u) this.g.outposts.courseTo(u.o); });
+      $('topStack').insertBefore(el, $('toasts'));
+    }
+    const u = this.g.outposts.urgent();
+    el.classList.toggle('hidden', !u);
+    if (u && el.firstChild.textContent !== u.text) el.firstChild.textContent = u.text;
   }
 
   // The top bar wraps to more rows with long system names, big credit totals or larger phone text
@@ -273,6 +288,7 @@ export class UI {
     W.gates.forEach((gt, i) => list.push({ key: `gate${i}`, pos: gt.pos, cls: 'gate', name: `⟶ ${g.galaxy.systems[gt.to].name}`, edge: false }));
     W.fields.forEach((f, i) => { if (f.surge || f.center.distanceTo(p.pos) > f.radius) list.push({ key: `field${i}`, pos: f.center, cls: f.surge ? 'field surge' : 'field', name: f.surge ? `✦ LUMENITE SURGE · ${f.name}` : `${f.name} · ${COMM[f.primary].name}`, edge: !!f.surge }); });
     for (const m of g.events.markers()) list.push({ ...m, cls: 'event' + (m.ship === g.target ? ' target' : '') });
+    for (const m of g.outposts.markers()) list.push(m);
     W.deposits.forEach((d, i) => { if (d.pos.distanceTo(p.pos) < 5000 && d.amount > 0) list.push({ key: `dep${i}`, pos: d.pos, cls: 'deposit', name: `◆ ${COMM[d.ore].name} deposit` }); });
     W.derelicts.forEach((d, i) => { if (!d.occupied && d.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `der${i}`, pos: d.pos, cls: 'derelict', name: d.name }); });
     for (const t of g.traders) if (!t.dead && !(t.disabled && t.eventId) && t.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${t.uid}`, pos: t.pos, cls: 'trader' + (t === g.target ? ' target' : ''), name: t.name, edge: t === g.target });
@@ -457,7 +473,7 @@ export class UI {
   }
 
   dialog(html, buttons) {
-    const box = $('dialogBox'); box.classList.remove('saves'); box.innerHTML = html;
+    const box = $('dialogBox'); box.classList.remove('saves', 'outpostBox'); if (this.g.outposts) this.g.outposts.panel = null; box.innerHTML = html;
     for (const b of buttons) {
       const el = document.createElement('button'); el.className = `pbtn ${b.primary ? 'primary' : 'secondary'}`; el.textContent = b.label;
       el.addEventListener('click', () => { $('dialog').classList.add('hidden'); this.g.audio.play('click', { vol: 0.4 }); b.fn && b.fn(); });
@@ -587,6 +603,13 @@ export class UI {
     const here = (e) => e.sys === s.systemId ? ' <small>(this system)</small>' : '';
     return `<div class="card news"><div><h3>Sector News · Day ${s.day}</h3>${evs.map((e) => { const d = describe(e, g.galaxy, s, g.player.stats.sensorLvl); return `<p><b style="color:${d.col}">${d.ch}</b> <b>${d.title}</b>${here(e)}: ${d.line}</p>`; }).join('')}</div></div>`;
   }
+  outpostsHTML() {
+    const g = this.g, s = g.state, max = maxOutposts(s), ft = factionTier(standingWith(s, g.sysInfo.eco));
+    const why = s.credits < CHARTER_PRICE ? `◈ ${fmt(CHARTER_PRICE)}` : ft.level < 0 ? `NEEDS NEUTRAL WITH ${FACTIONS[g.sysInfo.eco].short.toUpperCase()}` : s.outposts.length + s.charters >= max ? `LIMIT ${max} AT YOUR RANK` : '';
+    const list = s.outposts.map((o) => `<p>⌂ <b>${o.name}</b> · ${g.galaxy.systems[o.sys].name} · ${builtMods(o).length} modules · storage ${storageUsed(o)}/${storageCap(o)}${o.credits ? ` · ◈${fmt(o.credits)} waiting` : ''}${o.raid && o.raid.phase !== 'pending' ? ' · <b style="color:#b0451a">⚠ RAID</b>' : ''} <button class="sbtn" data-act="opcourse" data-arg="${o.id}">SET COURSE</button></p>`).join('');
+    return `<div class="card news"><div><h3>Outposts</h3><p>Buy a charter, fly to an asteroid field or planet deposit, and press ESTABLISH OUTPOST. Modules cost credits plus materials you haul in. Production runs every day, even while you're away. Up to ${max} at your rank.</p>
+      ${list}<p>Charters held: <b>${s.charters}</b> <button class="sbtn buy" data-act="charter" ${why ? 'disabled' : ''}>${why || `BUY CHARTER · ◈ ${fmt(CHARTER_PRICE)}`}</button></p></div></div>`;
+  }
   factionsHTML() {
     const g = this.g, s = g.state, here = g.sysInfo.eco;
     const rows = FACTION_ORDER.map((f) => {
@@ -611,6 +634,7 @@ export class UI {
       <div class="card"><div><h3>Hull Repair</h3><p>${missing > 0 ? `${missing} damage to patch` : 'Hull is pristine'}</p></div><button class="sbtn buy" data-act="repair" ${missing > 0 && s.credits >= repair ? '' : 'disabled'}>◈ ${fmt(repair)}</button></div>
       <div class="card"><div><h3>Missile Restock</h3><p>${p.stats.mslCap ? `${p.missiles}/${p.stats.mslCap} loaded · ◈60 each` : 'No missile rack installed'}</p></div><button class="sbtn buy" data-act="missiles" ${mslNeed > 0 && s.credits >= mslCost ? '' : 'disabled'}>◈ ${fmt(mslCost)}</button></div>
       ${this.newsHTML()}
+      ${this.outpostsHTML()}
       ${this.factionsHTML()}
       <div class="card"><div><h3>Rest Until Tomorrow</h3><p>Skip to Day ${s.day + 1}. Prices recover, rocks and deposits regrow, new events may appear.${restNote}</p></div><button class="sbtn" data-act="rest">REST</button></div>
       <div class="card"><div><h3>Pilot Record</h3><p>Rank <b>${RANK_NAMES[r]}</b> · Net worth ◈ ${fmt(netWorth(s))}<br>Mined ${s.stats.mined} · Trades ${s.stats.trades} · Contracts ${s.stats.contracts} · Outlaws downed ${s.stats.kills} · Jumps ${s.stats.jumps}</p></div></div>
@@ -668,6 +692,10 @@ export class UI {
       while (q > 0 && E.quoteBuy(sid, arg, q) > s.credits) q--;
       if (q > 0) { const cost = E.buy(sid, arg, q); s.credits -= cost; p.cargo[arg] = (p.cargo[arg] || 0) + q; s.stats.trades++; g.audio.play('click', { vol: 0.6 }); }
       else this.toast('Not enough credits or cargo space', 'warn', 2);
+    } else if (act === 'charter') {
+      if (s.credits >= CHARTER_PRICE && s.outposts.length + s.charters < maxOutposts(s)) { s.credits -= CHARTER_PRICE; s.charters++; g.audio.play('coins', { vol: 0.8 }); this.toast('Outpost Charter purchased: find a site and press ESTABLISH OUTPOST', 'good', 4); }
+    } else if (act === 'opcourse') {
+      const o = s.outposts.find((x) => x.id === arg); if (o) { g.outposts.courseTo(o); return; }
     } else if (act === 'buyunique') {
       const rec = g.activeShipRec(), price = this.uniquePrice(arg, rec.hull);
       if (s.credits >= price && rec.uniques.length < uniqueSlots(rec.hull) && factionTier(standingWith(s, UNIQUES[arg].faction)).level >= 2) {
@@ -782,6 +810,7 @@ export class UI {
     });
     Wd.derelicts.forEach((d) => { if (!d.occupied) items.push({ kind: 'derelict', pos: d.pos, name: d.name, color: '#ffb07a', r: 5, arrive: 120 }); });
     items.push(...g.events.mapItems());
+    items.push(...g.outposts.mapItems());
     return items;
   }
   drawMap() {
@@ -811,7 +840,7 @@ export class UI {
     ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(sx, sy, glowR, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = 'rgba(239,230,210,.12)';
     for (const pl of g.world.planets) { const d = Math.hypot(pl.pos.x, pl.pos.z) * s; ctx.beginPath(); ctx.arc(sx, sy, d, 0, Math.PI * 2); ctx.stroke(); }
-    const PRI = { event: 6, station: 5, gate: 4, planet: 3, field: 2, derelict: 1 };
+    const PRI = { outpost: 7, site: 0, event: 6, station: 5, gate: 4, planet: 3, field: 2, derelict: 1 };
     const labels = [];
     for (const it of this.systemItems()) {
       const [x, y] = P(it.pos);
@@ -979,6 +1008,13 @@ export class UI {
         labels.push({ x: ex, y: ey, gap: 0, lines: [], pri: 0, blocks: [{ x: ex - 8, y: ey - 8, w: 16, h: 16 }] });
       });
     }
+    // outposts: ⌂ above-left of the system (red while a raid is incoming)
+    ctx.font = '900 15px system-ui, sans-serif';
+    for (const o of g.state.outposts) {
+      const [x, y] = P(S[o.sys]); const ex = x - 16, ey = y - 15, hot = o.raid && o.raid.phase !== 'pending';
+      ctx.lineWidth = 3; ctx.strokeStyle = '#141826'; ctx.strokeText('⌂', ex, ey); ctx.fillStyle = hot ? '#ff4a3a' : '#9ff0ff'; ctx.fillText('⌂', ex, ey);
+      labels.push({ x: ex, y: ey, gap: 0, lines: [], pri: 0, blocks: [{ x: ex - 8, y: ey - 8, w: 16, h: 16 }] });
+    }
     // gold stars on systems with contract drop-offs
     const dests = new Set(g.state.missions.map((m) => m.dest.sys));
     ctx.font = '900 18px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1021,6 +1057,8 @@ export class UI {
       if (sel.kind === 'station') extra = '<p>Safe harbor: market, upgrades, shipyard, repairs.</p>';
       if (sel.kind === 'derelict') extra = '<p>Abandoned hulk. Hold SALVAGE nearby for credits & parts. Restocks every 3 days.</p>';
       if (sel.kind === 'field' && sel.field.surge) extra += '<p style="color:#4f7a10"><b>✦ Lumenite surge today:</b> far higher chance of Lumenite from every rock here.</p>';
+      if (sel.kind === 'outpost') { const o = sel.outpost; extra = `<p>Your outpost: ${builtMods(o).length} modules · storage ${storageUsed(o)}/${storageCap(o)}${o.credits ? ` · ◈${fmt(o.credits)} to collect` : ''}${o.raid && o.raid.phase !== 'pending' ? ' · <b style="color:#b0451a">⚠ RAID INCOMING</b>' : ''}</p>`; }
+      if (sel.kind === 'site') extra = `<p>Unclaimed outpost site. Ore: <b>${COMM[sel.site.ore].name}</b>${sel.site.gas ? ' (gas giant)' : ''}. Fly here and press ESTABLISH OUTPOST.</p>`;
       if (sel.kind === 'event') { const d = describe(sel.ev, g.galaxy, g.state, g.player.stats.sensorLvl); extra = `<p>${d.line}</p>${sel.ev.type === 'distress' ? '<p>Fly alongside and hold ASSIST to patch the ship up.</p>' : sel.ev.type === 'wreck' ? '<p>Fly close and hold SALVAGE.</p>' : '<p>Approach and the base launches its guards. Destroy the base itself for the loot.</p>'}`; }
       const d = (sel.dest || sel.pos).distanceTo(g.player.pos);
       const here = g.state.missions.filter((m) => m.dest.sys === g.state.systemId && ((sel.kind === 'station' && m.dest.kind === 'station') || (sel.kind === 'planet' && m.dest.kind === 'planet' && g.world.deposits[m.dest.planet] === sel.deposit)));
