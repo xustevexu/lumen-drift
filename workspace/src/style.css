@@ -103,6 +103,13 @@ button { font-family: var(--font); cursor: pointer; touch-action: manipulation; 
 .bar i.hu { background: var(--warm); }
 .bar i.sh { background: var(--cool); }
 .bar i.en { background: #f2d36b; }
+.bar i.fu { background: #c8a0ff; }
+.bar i.fu.low { background: #ff6b4a; animation: evpulse 0.8s steps(2) infinite; }
+.msglog { max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.msglog p { font: 600 12.5px/1.35 var(--font) !important; padding: 3px 6px; border-left: 4px solid var(--cool); background: #fffaf0; }
+.msglog p.warn { border-left-color: var(--warm); }
+.msglog p.good { border-left-color: #7bc86c; }
+.msglog small { opacity: .6; margin-right: 6px; }
 #status { position: absolute; left: calc(12px + var(--safe-l)); bottom: calc(10px + var(--safe-b)); width: 200px; background: rgba(239,230,210,.92); color: var(--ink); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 5px 8px; pointer-events: none; }
 .srow { display: flex; align-items: center; gap: 6px; font: 800 10px var(--font); letter-spacing: .5px; margin: 2px 0; }
 .srow > span:first-child { width: 36px; }

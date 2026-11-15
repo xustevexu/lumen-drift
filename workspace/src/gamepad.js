@@ -73,7 +73,7 @@ export class GamepadInput {
   helpText(short = false) {
     const L = this.layout;
     const core = `L-stick steer · ${L.RT}/${L.LT} throttle · ${L.X} fire · ${L.A} action`;
-    return short ? core : `${core} · ${L.B} missile · ${L.RB} boost · ${L.Y} cruise · ${L.LB} target · ${L.BACK} map · ${L.START} pause · menus: D-pad/stick move, ${L.A} select, ${L.B} back, ${L.LB}/${L.RB} tabs`;
+    return short ? core : `${core} · ${L.B} missile · ${L.RB} boost · ${L.Y} cruise · ${L.LB} target · ${L.BACK} map · ${L.START} pause · menus: D-pad/stick move, ${L.A} select, ${L.B} back, ${L.LB}/${L.RB} tabs, ${L.X} launch probe on the map`;
   }
 
   rumble(strong, weak = strong, ms = 120) {
@@ -284,6 +284,7 @@ export class GamepadInput {
       else { const [cx, cy] = ui.mapCenter(); const n = items.reduce((a, i) => (!a || Math.hypot(i.x - cx, i.y - cy) < Math.hypot(a.x - cx, a.y - cy) ? i : a), null); if (n) this.selectMap(n); }
     }
     if (S.hit(B.B) || S.hit(B.BACK)) ui.closeMap();
+    if (S.hit(B.X) && ui.mapTab === 'system') { const pb = $('btnProbe'); if (pb && !pb.disabled) pb.click(); } // launch a scanner probe
     if (S.hit(B.LB) || S.hit(B.RB) || S.hit(B.Y)) this.cycleTabs($('mapTabs'), S.hit(B.LB) ? -1 : 1);
     if (S.hit(B.START)) { ui.closeMap(); ui.togglePause(); }
     // zoom toward the selection with the triggers, pan with the right stick

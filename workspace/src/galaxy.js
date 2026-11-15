@@ -106,7 +106,8 @@ export function generateSystem(sys, galaxy) {
     const type = rng.weighted(i === 0 ? { rocky: 3, desert: 3, ocean: 1 } : { rocky: 2, desert: 1, ice: 2, ocean: 2, gas: 3 });
     const radius = type === 'gas' ? rng.range(560, 820) : rng.range(220, 420);
     const a = rng.range(0, Math.PI * 2);
-    const pos = [Math.cos(a) * orbit, rng.range(-120, 120), Math.sin(a) * orbit];
+    const incl = rng.range(-120, 120) / 120 * 0.42; // orbital inclination, up to ~24°: systems are 3D, not a flat disc
+    const pos = [Math.cos(a) * orbit * Math.cos(incl), Math.sin(incl) * orbit, Math.sin(a) * orbit * Math.cos(incl)];
     const pal = rng.pick(PLANET_PALETTES[type]);
     planets.push({
       type, radius, pos, pal, atmo: ATMO[type], seed: rng.range(0, 100), spin: rng.range(0.004, 0.012) * (rng.chance(0.5) ? 1 : -1),
@@ -123,10 +124,10 @@ export function generateSystem(sys, galaxy) {
   let station = null;
   for (let t = 0; t < 60 && !station; t++) {
     const a = rng.range(0, Math.PI * 2), r = host.radius + rng.range(700, 1100);
-    const p = [host.pos[0] + Math.cos(a) * r, rng.range(-40, 40), host.pos[2] + Math.sin(a) * r];
+    const p = [host.pos[0] + Math.cos(a) * r, host.pos[1] + rng.range(-40, 40) * 12, host.pos[2] + Math.sin(a) * r];
     if (far(p, occupied, 300)) station = { pos: p, name: `${sys.station} Station` };
   }
-  if (!station) station = { pos: [host.pos[0] + host.radius + 900, 0, host.pos[2]], name: `${sys.station} Station` };
+  if (!station) station = { pos: [host.pos[0] + host.radius + 900, host.pos[1], host.pos[2]], name: `${sys.station} Station` };
   occupied.push({ pos: station.pos, r: 400 });
 
   // gates toward linked systems (a link to the hidden system is added at the end with its own RNG)
@@ -135,7 +136,7 @@ export function generateSystem(sys, galaxy) {
     const o = galaxy.systems[lid];
     const dx = o.x - sys.x, dz = o.y - sys.y; const L = Math.hypot(dx, dz) || 1;
     const r = 8200 + rng.range(-300, 300);
-    const pos = [(dx / L) * r, rng.range(-100, 100), (dz / L) * r];
+    const pos = [(dx / L) * r, rng.range(-100, 100) * 18, (dz / L) * r];
     occupied.push({ pos, r: 400 });
     return { to: lid, pos, name: `Gate → ${o.name}` };
   });
@@ -146,7 +147,7 @@ export function generateSystem(sys, galaxy) {
   const orePrimary = { mining: { ferrite: 3, cobalt: 3, ice: 1 }, industrial: { ferrite: 3, ice: 1 }, agricultural: { ice: 3, ferrite: 2 }, hightech: { cobalt: 2, ice: 2, ferrite: 1 }, frontier: { ferrite: 2, cobalt: 2, ice: 1 } }[sys.eco];
   for (let i = 0, t = 0; i < nF && t < 300; t++) {
     const a = rng.range(0, Math.PI * 2), r = rng.range(2400, 7200);
-    const p = [Math.cos(a) * r, rng.range(-80, 80), Math.sin(a) * r];
+    const p = [Math.cos(a) * r, rng.range(-80, 80) * 30, Math.sin(a) * r];
     const radius = rng.range(380, 560);
     if (!far(p, occupied, radius + 300)) continue;
     const primary = rng.weighted(orePrimary);
@@ -161,7 +162,7 @@ export function generateSystem(sys, galaxy) {
   const derelicts = [];
   for (let i = 0, t = 0; i < nD && t < 200; t++) {
     const a = rng.range(0, Math.PI * 2), r = rng.range(2600, 7600);
-    const p = [Math.cos(a) * r, rng.range(-120, 120), Math.sin(a) * r];
+    const p = [Math.cos(a) * r, rng.range(-120, 120) * 18, Math.sin(a) * r];
     if (!far(p, occupied, 300)) continue;
     derelicts.push({ pos: p, seed: rng.int(1, 1e9), name: rng.pick(['Wreck of the Calloway', 'Hulk “Marigold”', 'Derelict Ore Barge', 'Abandoned Survey Probe', 'Gutted Courier', 'Old Relay Hulk']) });
     occupied.push({ pos: p, r: 200 });

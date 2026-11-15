@@ -148,6 +148,14 @@ export class UI {
 
   // ------------------------------------------------------------ toasts / fx
   toast(msg, kind = '', secs = 3) {
+    const st = this.g.state;
+    if (st) { // keep a history so announcements can be re-read later (pause menu → MESSAGE LOG)
+      if (!Array.isArray(st.msgLog)) st.msgLog = [];
+      const h = Math.floor((st.dayTime || 0) * 24), mi = Math.floor(((st.dayTime || 0) * 24 - h) * 60);
+      const last = st.msgLog[0];
+      if (!last || last.m !== msg) st.msgLog.unshift({ d: st.day, t: `${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}`, m: msg, k: kind });
+      if (st.msgLog.length > 80) st.msgLog.length = 80;
+    }
     const box = $('toasts');
     while (box.children.length > 3) box.firstChild.remove();
     const t = document.createElement('div'); t.className = `toast ${kind}`; t.textContent = msg; box.appendChild(t);
@@ -174,6 +182,7 @@ export class UI {
     $('barHull').style.width = `${(p.hp / p.maxHp) * 100}%`;
     $('barShield').style.width = `${p.maxShield ? (p.shield / p.maxShield) * 100 : 0}%`;
     $('barEnergy').style.width = `${(p.energy / p.maxEnergy) * 100}%`;
+    const fpct = p.stats.fuel ? p.fuel / p.stats.fuel : 0; $('barFuel').style.width = `${fpct * 100}%`; $('barFuel').classList.toggle('low', fpct <= 0.15);
     $('cargoTxt').textContent = `${p.cargoUsed()}/${p.stats.cargo}`;
     $('spdTxt').textContent = `${Math.round(p.speed)} m/s`;
     $('thrFill').style.height = `${g.input.throttle * 100}%`; $('thrKnob').style.bottom = `${g.input.throttle * 100}%`;
@@ -329,7 +338,8 @@ export class UI {
       for (let k = 0; k < 4; k++) { const hit = placed.find((q) => Math.abs(q[0] - x) < 110 && Math.abs(q[1] - y) < 16); if (!hit) break; y = hit[1] + 17; }
       placed.push([x, y]);
       el.style.left = `${x}px`; el.style.top = `${y}px`;
-      const txt = `${m.name} ${this.dist(m.pos.distanceTo(p.pos))}`;
+      const dy = m.pos.y - p.pos.y, alt = Math.abs(dy) > 400 ? (dy > 0 ? ' ▲' : ' ▼') : '';
+      const txt = `${m.name} ${this.dist(m.pos.distanceTo(p.pos))}${alt}`;
       const tx = el.lastChild; if (tx.textContent !== txt) tx.textContent = txt;
     }
     for (const [k, el] of this.markers) if (!seen.has(k)) { el.remove(); this.markers.delete(k); }
@@ -377,6 +387,12 @@ export class UI {
     this.bindMapGestures();
     $('mapInfo').addEventListener('click', (e) => { const b = e.target.closest('button[data-act]'); if (b) this.mapAction(b.dataset.act); });
     $('btnResume').addEventListener('click', () => this.togglePause());
+    $('btnLog').addEventListener('click', () => this.openLog());
+    $('btnQuit').addEventListener('click', () => {
+      this.dialog('<div class="ov-title">QUIT TO TITLE?</div><p>Your game is saved first. Press CONTINUE on the title screen to pick up where you left off.</p>', [
+        { label: 'SAVE & QUIT', primary: true, fn: () => { this.g.save(); location.reload(); } }, { label: 'CANCEL', fn: () => $('pause').classList.remove('hidden') }]);
+      $('pause').classList.add('hidden');
+    });
     $('btnSound').addEventListener('click', () => { const s = this.g.state; s.sound = !s.sound; this.g.audio.setEnabled(s.sound); $('btnSound').textContent = `SOUND: ${s.sound ? 'ON' : 'OFF'}`; });
     $('btnQuality').addEventListener('click', () => { const s = this.g.state; this.g.applyQuality(s.quality === 'high' ? 'low' : 'high'); $('btnQuality').textContent = `QUALITY: ${s.quality.toUpperCase()}`; });
     $('btnReset').addEventListener('click', () => {
@@ -387,6 +403,12 @@ export class UI {
     window.addEventListener('resize', () => { if (!$('mapOv').classList.contains('hidden')) this.drawMap(); });
   }
 
+  openLog() {
+    const L = (this.g.state.msgLog || []);
+    const rows = L.map((e) => `<p class="${e.k || ''}"><small>Day ${e.d} ${e.t}</small>${e.m.replace(/</g, '&lt;')}</p>`).join('') || '<p>No messages yet.</p>';
+    $('pause').classList.add('hidden');
+    this.dialog(`<div class="ov-title">MESSAGE LOG</div><div class="msglog">${rows}</div>`, [{ label: 'BACK', primary: true, fn: () => $('pause').classList.remove('hidden') }]);
+  }
   togglePause() {
     const el = $('pause'); const open = el.classList.contains('hidden');
     if (open && this.modalOpen()) return;
@@ -397,7 +419,7 @@ export class UI {
       $('btnSound').textContent = `SOUND: ${s.sound ? 'ON' : 'OFF'}`; $('btnQuality').textContent = `QUALITY: ${s.quality.toUpperCase()}`;
       const r = pilotRank(s);
       const ms = s.missions.length ? `<br><b>Contracts:</b>${s.missions.map((m) => `<br><small>★ ${m.title} → ${m.dest.name}, ${g_sys(this.g, m)} · due Day ${m.deadline}${m.vip ? ' · VIP' : ''}</small>`).join('')}` : '';
-      $('pauseStats').innerHTML = `Rank: <b>${RANK_NAMES[r]}</b> · Net worth ◈ ${fmt(netWorth(s))}<br>Day ${s.day} · Jumps ${s.stats.jumps} · Ore mined ${s.stats.mined} · Outlaws downed ${s.stats.kills} · Contracts ${s.stats.contracts}${ms}<br><small>Keys: WASD steer · R/F throttle · Space fire · E action · Q missile · T target · C cruise · M map</small>${this.g.pad.active ? `<br><small>Controller: ${this.g.pad.helpText()}</small>` : ''}`;
+      $('pauseStats').innerHTML = `Rank: <b>${RANK_NAMES[r]}</b> · Net worth ◈ ${fmt(netWorth(s))} · Fuel ${Math.floor(this.g.player.fuel)}/${this.g.player.stats.fuel}<br>Day ${s.day} · Jumps ${s.stats.jumps} · Ore mined ${s.stats.mined} · Outlaws downed ${s.stats.kills} · Contracts ${s.stats.contracts}${ms}<br><small>Keys: WASD steer · R/F throttle · Space fire · E action · Q missile · T target · C cruise · M map</small>${this.g.pad.active ? `<br><small>Controller: ${this.g.pad.helpText()}</small>` : ''}`;
       this.g.save();
     }
   }
@@ -703,6 +725,7 @@ export class UI {
     const r = pilotRank(s);
     return `<div class="svc">
       <div class="card"><div><h3>Hull Repair</h3><p>${missing > 0 ? `${missing} damage to patch` : 'Hull is pristine'}</p></div><button class="sbtn buy" data-act="repair" ${missing > 0 && s.credits >= repair ? '' : 'disabled'}>◈ ${fmt(repair)}</button></div>
+      <div class="card"><div><h3>Refuel</h3><p>${Math.floor(p.fuel)}/${p.stats.fuel} in the tank · ◈${g.fuelPrice()} a unit here (fuel is cheapest in Mining systems)</p></div><button class="sbtn buy" data-act="refuel" ${p.fuel < p.stats.fuel && s.credits >= g.fuelPrice() ? '' : 'disabled'}>◈ ${fmt(Math.ceil(p.stats.fuel - p.fuel) * g.fuelPrice())}</button></div>
       <div class="card"><div><h3>Missile Restock</h3><p>${p.stats.mslCap ? `${p.missiles}/${p.stats.mslCap} loaded · ◈60 each` : 'No missile rack installed'}</p></div><button class="sbtn buy" data-act="missiles" ${mslNeed > 0 && s.credits >= mslCost ? '' : 'disabled'}>◈ ${fmt(mslCost)}</button></div>
       ${this.siegeHTML()}
       ${this.newsHTML()}
@@ -765,6 +788,7 @@ export class UI {
       while (q > 0 && E.quoteBuy(sid, arg, q) > s.credits) q--;
       if (q > 0) { const cost = E.buy(sid, arg, q); s.credits -= cost; p.cargo[arg] = (p.cargo[arg] || 0) + q; s.stats.trades++; g.audio.play('click', { vol: 0.6 }); }
       else this.toast('Not enough credits or cargo space', 'warn', 2);
+    } else if (act === 'refuel') { g.refuel(false);
     } else if (act === 'probe') {
       if (g.state.explore.probes < PROBE_MAX && s.credits >= PROBE_PRICE) { s.credits -= PROBE_PRICE; g.state.explore.probes++; g.audio.play('click', { vol: 0.6 }); }
     } else if (act === 'hire') {
@@ -893,7 +917,7 @@ export class UI {
       pb.addEventListener('click', () => { if (this.g.explore.probe()) { this.drawMap(); this.renderMapTabs(); } });
       $('btnMapClose').parentNode.insertBefore(pb, $('btnMapClose'));
     }
-    pb.textContent = `LAUNCH PROBE (${this.g.state.explore.probes})`;
+    pb.textContent = `LAUNCH PROBE (${this.g.state.explore.probes})${this.g.pad.active ? ` [${this.g.pad.layout.X}]` : ''}`;
     pb.disabled = !this.g.state.explore.probes; pb.style.display = this.mapTab === 'system' ? '' : 'none';
     $('mapSub').textContent = this.mapTab === 'system' ? `${this.g.sysInfo.name} system · tap a destination for autopilot` : 'Galaxy chart · tap a system for market intel & routes';
     this.renderMapInfo();
@@ -960,7 +984,8 @@ export class UI {
       const sel = this.mapSel && this.mapSel.name === it.name;
       if (sel) { ctx.strokeStyle = '#f0703c'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, rad + 7, 0, Math.PI * 2); ctx.stroke(); }
       const ir = Math.min(rad, 12);
-      labels.push({ x, y, gap: Math.min(rad, 40) + 5, lines: [it.kind === 'field' && it.field.surge ? `✦ ${it.name}` : it.kind === 'event' ? `${eventIcon(it.ev).ch} ${it.name}` : it.name], font: '700 12px system-ui, sans-serif', lh: 14, color: sel ? '#f0703c' : '#efe6d2', pri: sel ? 99 : PRI[it.kind], force: sel,
+      const dyy = it.pos.y - g.player.pos.y, altTxt = Math.abs(dyy) > 400 ? `${dyy > 0 ? '▲ above' : '▼ below'} ${this.dist(Math.abs(dyy))}` : null;
+      labels.push({ x, y, gap: Math.min(rad, 40) + 5, font2: '700 10px system-ui, sans-serif', color2: 'rgba(239,230,210,.7)', short: [it.kind === 'field' && it.field.surge ? `✦ ${it.name}` : it.name], lines: [it.kind === 'field' && it.field.surge ? `✦ ${it.name}` : it.kind === 'event' ? `${eventIcon(it.ev).ch} ${it.name}` : it.name, ...(altTxt ? [altTxt] : [])], font: '700 12px system-ui, sans-serif', lh: 14, color: sel ? '#f0703c' : '#efe6d2', pri: sel ? 99 : PRI[it.kind], force: sel,
         blocks: [{ x: x - ir, y: y - ir, w: ir * 2, h: ir * 2 }] });
     }
     for (const t of g.traders) { const [x, y] = P(t.pos); ctx.fillStyle = '#f2d36b'; ctx.fillRect(x - 3, y - 3, 6, 6); }

@@ -76,7 +76,7 @@ export class Ship {
     this.yaw = wrapAngle(this.yaw + ystep);
     this.yawRate = ystep / Math.max(dt, 1e-4);
     this.pitch += clamp(dp - this.pitch, -tr * 0.7, tr * 0.7);
-    this.pitch = clamp(this.pitch, -1.2, 1.2);
+    this.pitch = clamp(this.pitch, -1.35, 1.35);
     return Math.abs(yd) + Math.abs(dp - this.pitch);
   }
 

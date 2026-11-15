@@ -8,7 +8,7 @@ import { Economy, newState, pilotRank, netWorth } from './economy.js';
 import { readAuto, writeAuto, clearAuto, requestPersistence } from './save.js';
 import { clearSystemCache } from './missions.js';
 import { MAX_ACTIVE, normalizeMissionState, missionSpace, missionLure, boundToShip, markTaken, routePath, missionDanger, reqMet, reqText, standingGain, standingOf, standingTier } from './missions.js';
-import { HULLS, COMM, COMMODITIES, ECONOMIES, computeStats, DAY_LENGTH, TRADER_NAMES, OUTLAW_NAMES } from './data.js';
+import { HULLS, COMM, COMMODITIES, ECONOMIES, computeStats, DAY_LENGTH, TRADER_NAMES, OUTLAW_NAMES, FUEL_PRICE, FUEL_USE } from './data.js';
 import { makeGlbTemplate, buildShipTemplate } from './ships.js';
 import { globalUniforms } from './shaders.js';
 import { Post } from './post.js';
@@ -183,6 +183,7 @@ export class Game {
     p.cargo = rec.cargo; // shared reference with save record
     if (rec.hp != null) p.hp = Math.min(p.maxHp, rec.hp);
     p.missiles = Math.min(rec.missiles || 0, stats.mslCap);
+    p.fuel = Math.min(stats.fuel, rec.fuel ?? stats.fuel);
     p.pos.copy(pos); p.yaw = yaw; p.speed = 0;
     p.obj.quaternion.setFromEuler(new THREE.Euler(0, yaw, 0, 'YXZ'));
     this.player = p;
@@ -195,7 +196,7 @@ export class Game {
   }
   syncShipRec() {
     const rec = this.activeShipRec(); if (!rec || !this.player) return;
-    rec.hp = this.player.hp; rec.missiles = this.player.missiles;
+    rec.hp = this.player.hp; rec.missiles = this.player.missiles; rec.fuel = this.player.fuel;
   }
   shipStats(rec) { return applyUniques(computeStats(rec.hull, rec.mods), rec.uniques); }
   refreshPlayerStats() {
@@ -551,7 +552,7 @@ export class Game {
       this.ui.dialog(`<div class="ov-title">SHIP DISABLED</div><p>Your ${HULLS[p.hullId].name} was overwhelmed. The Frontier Insurance Guild tows you to ${this.world.station.name}.</p><p><b>Cargo lost.</b> Insurance fee: <b>◈ ${fmt(fee)}</b></p>`,
         [{ label: 'ACCEPT TOW', primary: true, fn: () => {
           this.state.credits -= fee;
-          const rec = this.activeShipRec(); for (const k in rec.cargo) delete rec.cargo[k]; rec.hp = null;
+          const rec = this.activeShipRec(); for (const k in rec.cargo) delete rec.cargo[k]; rec.hp = null; rec.fuel = Math.max(rec.fuel ?? 0, computeStats(rec.hull, rec.mods).fuel * 0.5);
           for (const m of this.missionsAboard()) this.failMission(m, m.type === 'passenger' ? 'passengers evacuated by rescue pods' : 'contract cargo lost with the ship');
           for (const o of this.outlaws) { o.beam && (o.beam.visible = false); o.remove(); }
           this.outlaws = []; this.fx.clearAll();
@@ -621,6 +622,7 @@ export class Game {
     this.economy.recordIntel(sid);
     this.audio.play('warp', { vol: 0.5, rate: 0.7 });
     this.deliverAtStation();
+    this.refuel(true);
     this.fleet.despawnAll();
     this.save();
     this.ui.openStation();
@@ -684,6 +686,9 @@ export class Game {
   // -------------------------------------------------------------- jumping
   beginJump(gate) {
     if (this.warp) return;
+    const need = FUEL_USE.jump * this.player.stats.fuelBurn;
+    if (this.player.fuel < need) { this.ui.toast(`Not enough fuel to jump (need ${Math.ceil(need)}, have ${Math.floor(this.player.fuel)}). Refuel at a station, or call a fuel tender.`, 'warn', 4); return; }
+    this.player.fuel -= need;
     this.warp = { t: 0, gate };
     this.autopilot = null; this.player.cruise = false;
     this.audio.play('warp', { vol: 0.9 });
@@ -734,7 +739,9 @@ export class Game {
     if (op && op.type === 'outpost') return op;
     const m = W.findMineable(p.pos, p.stats.mineRange);
     if (m) return { type: 'mine', label: m.kind === 'deposit' ? 'DRILL' : 'MINE', node: m, hold: true };
-    return op;
+    if (op) return op;
+    if (p.fuel < FUEL_USE.jump * p.stats.fuelBurn) return { type: 'tender', label: `CALL FUEL TENDER · ◈ ${fmt(400 + Math.min(30, Math.ceil(p.stats.fuel - p.fuel)) * 20)}`, warm: true };
+    return null;
   }
 
   doAction(act) {
@@ -744,6 +751,7 @@ export class Game {
     else if (act.type === 'hail') this.ui.openTraderDialog(act.trader);
     else if (act.type === 'outpost') this.outposts.openPanel(act.outpost);
     else if (act.type === 'dormant') this.explore.dormantDialog();
+    else if (act.type === 'tender') this.callTender();
     else if (act.type === 'establish') {
       this.ui.dialog(`<div class="ov-title">ESTABLISH OUTPOST?</div><p>Found an outpost at <b>${act.site.name}</b>. Site ore: <b>${COMM[act.site.ore].name}</b>${act.site.gas ? ' (gas giant: build a Gas Siphon here)' : ''}.</p><p>This uses 1 Outpost Charter (you have ${this.state.charters}).</p>`,
         [{ label: 'ESTABLISH', primary: true, fn: () => this.outposts.establish(act.site) }, { label: 'NOT HERE' }]);
@@ -1024,21 +1032,56 @@ export class Game {
       const tr = p.stats.turn * (p.cruise ? 0.45 : 1);
       p.yawRate = -inp.sx * tr;
       p.yaw += p.yawRate * dt;
-      p.pitch = clamp(p.pitch - inp.sy * tr * 0.75 * dt, -1.15, 1.15);
-      if (Math.abs(inp.sy) < 0.05) p.pitch = damp(p.pitch, 0, 0.35, dt);
+      p.pitch = clamp(p.pitch - inp.sy * tr * 0.75 * dt, -1.35, 1.35); // holds its climb/dive: no auto-levelling
       p.throttle = inp.throttle;
       if (p.cruise && !p.stats.noInterdict && this.hostilesNear(1300)) { p.cruise = false; this.ui.toast('Cruise disrupted — hostiles nearby', 'warn', 2.5); }
     }
     p.boost = inp.boost && !p.cruise && !this.warp;
+    this.burnFuel(dt);
     p.updateMotion(dt, this.warp ? null : this.world);
     p.updateVisual(dt);
   }
 
   setCruise(on) {
     const p = this.player;
+    if (on && p.fuel <= 0) { this.ui.toast('Fuel tank empty: cruise unavailable', 'warn', 2.5); return; }
     if (on && !p.stats.noInterdict && this.hostilesNear(1300)) { this.ui.toast('Cannot engage cruise — hostiles nearby', 'warn', 2); return; }
     p.cruise = on;
     if (on) { this.input.throttle = Math.max(this.input.throttle, 0.5); this.audio.play('warp', { vol: 0.35, rate: 1.3 }); }
+  }
+
+  // Fuel: cruise and boost burn it, life support trickles; an empty tank means no cruise or jumps and half thrust.
+  burnFuel(dt) {
+    const p = this.player, b = p.stats.fuelBurn;
+    if (this.warp || this.docked) return;
+    const use = (FUEL_USE.idle + (p.cruise ? FUEL_USE.cruise : 0) + (p.boost ? FUEL_USE.boost : 0)) * b * dt;
+    const before = p.fuel / p.stats.fuel;
+    p.fuel = Math.max(0, p.fuel - use);
+    const after = p.fuel / p.stats.fuel;
+    if (before > 0.25 && after <= 0.25) this.ui.toast('⛽ Fuel at 25%: plan a stop at a station', 'warn', 4);
+    if (before > 0.1 && after <= 0.1) { this.ui.toast('⛽ Fuel at 10%! Refuel soon or you will be stranded', 'warn', 5); this.audio.play('alarm', { vol: 0.4, rate: 1.4 }); }
+    if (p.fuel <= 0) {
+      if (p.cruise) p.cruise = false;
+      if (before > 0) this.ui.toast('⛽ Tank empty: no cruise or jumps, thrusters at half power. Fly to a station, or press the action button to call a fuel tender.', 'warn', 7);
+      p.throttle = Math.min(p.throttle, 0.5); p.boost = false;
+    }
+  }
+  fuelPrice() { return FUEL_PRICE[this.sysInfo.eco] || 5; }
+  refuel(auto = false) {
+    const p = this.player, need = Math.ceil(p.stats.fuel - p.fuel); if (need <= 0) return 0;
+    const price = this.fuelPrice(), afford = Math.min(need, Math.floor(this.state.credits / price));
+    if (afford <= 0) { if (!auto) this.ui.toast('Not enough credits to refuel', 'warn', 2.5); return 0; }
+    p.fuel += afford; this.state.credits -= afford * price;
+    this.ui.toast(`⛽ Refuelled ${afford} units for ◈ ${fmt(afford * price)}${afford < need ? ' (all you could afford)' : ''}`, 'info', 3);
+    return afford;
+  }
+  // stranded: a tender brings 30 units at a steep price (you can go into debt for it)
+  callTender() {
+    const p = this.player, units = Math.min(30, Math.ceil(p.stats.fuel - p.fuel)), cost = 400 + units * 20;
+    p.fuel += units; this.state.credits -= cost;
+    this.fx.particles.burst(p.pos, 30, 40, 0xffd34a, 4, 1);
+    this.audio.play('warp', { vol: 0.5, rate: 1.3 });
+    this.ui.toast(`⛽ A fuel tender burns out to meet you: +${units} fuel for ◈ ${fmt(cost)}${this.state.credits < 0 ? '. You are in debt.' : ''}`, 'warn', 5);
   }
 
   // ignore: the destination object itself (station or asteroid field) so it is not treated as an obstacle

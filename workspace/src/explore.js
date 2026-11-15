@@ -161,7 +161,7 @@ export class ExploreManager {
   placeFor(a) {
     const W = this.g.world; let ang = a.a;
     for (let i = 0; i < 14; i++, ang += 0.45) {
-      const p = new THREE.Vector3(Math.cos(ang) * a.r, a.y, Math.sin(ang) * a.r);
+      const p = new THREE.Vector3(Math.cos(ang) * a.r, a.y * 8, Math.sin(ang) * a.r);
       const ok = W.planets.every((pl) => pl.pos.distanceTo(p) > pl.radius + 500) && W.fields.every((f) => f.center.distanceTo(p) > f.radius + 250)
         && W.station.pos.distanceTo(p) > (a.type === 'spire' ? 700 : 1200) && W.gates.every((gt) => gt.pos.distanceTo(p) > 900) && p.length() > this.g.sysData.star.radius + 1500;
       if (ok) return p;

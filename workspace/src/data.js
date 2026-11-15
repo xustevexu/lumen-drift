@@ -34,6 +34,10 @@ export const HULLS = {
     desc: 'Capital-class warden. Triple beam arrays, massive barrier and hold.' },
 };
 export const HULL_ORDER = ['wren', 'mule', 'kestrel', 'bastion'];
+// fuel tank and burn multiplier per hull (cruise, jumps, and a trickle for life support)
+export const FUEL = { wren: { cap: 100, burn: 1 }, mule: { cap: 150, burn: 1.3 }, kestrel: { cap: 120, burn: 1.1 }, bastion: { cap: 260, burn: 2 } };
+export const FUEL_PRICE = { mining: 3, industrial: 4, agricultural: 5, hightech: 5, frontier: 7 };
+export const FUEL_USE = { cruise: 0.12, boost: 0.03, idle: 0.02, jump: 6 }; // per second (jump: per jump)
 
 // ---------------- Modules ----------------
 export const MODULES = {
@@ -73,6 +77,8 @@ export function computeStats(hullId, mods) {
     sensorLvl: mods.sensors,
     energy: Math.round(M.reactor.cap[mods.reactor] * H.energy),
     energyRegen: M.reactor.regen[mods.reactor] * H.energy,
+    fuel: FUEL[hullId].cap,
+    fuelBurn: FUEL[hullId].burn * (1 - 0.1 * mods.engine), // better engines sip less
   };
 }
 

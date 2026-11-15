@@ -262,7 +262,7 @@ export class SectorEvents {
     const W = this.g.world, rng = new RNG(seed + 31);
     for (let i = 0; i < 30; i++) {
       const a = rng.range(0, Math.PI * 2), r = rng.range(3000, 7000);
-      const p = new THREE.Vector3(Math.cos(a) * r, rng.range(-150, 150), Math.sin(a) * r);
+      const p = new THREE.Vector3(Math.cos(a) * r, rng.range(-150, 150) * 12, Math.sin(a) * r);
       const clear = W.planets.every((pl) => pl.pos.distanceTo(p) > pl.radius + 450) && W.fields.every((f) => f.center.distanceTo(p) > f.radius + 200)
         && W.station.pos.distanceTo(p) > 800 && W.gates.every((gt) => gt.pos.distanceTo(p) > 800);
       if (clear) return p;

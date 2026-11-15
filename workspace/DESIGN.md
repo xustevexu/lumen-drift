@@ -161,6 +161,13 @@ Modules per ship (independent levels 0–3): Engine, Cargo Pod, Barrier, Beam, M
 ## 12k. Sky (shaders.js skyMaterial)
 - Rewritten for more open space: deep-black base, nebula only where noise peaks inside one or two per-system lobes, per-system galactic band with unresolved star glow and soft dust lanes, three star layers with colour tints (denser inside the band), two faint distant galaxies. Output clamped to 0.72 so no sky pixel crosses the bloom threshold (a bloomed single star pixel smears into a visible square).
 
+## 12l. Fuel, 3D systems, message log, quit
+- Fuel (`ship.fuel`, `FUEL` in data.js): tanks Wren 100 / Mule 150 / Kestrel 120 / Bastion 260; burn multiplier 1 / 1.3 / 1.1 / 2.0, −10% per Engine level. Use: cruise 0.12/s, boost 0.03/s, life support 0.02/s (×burn), jump 6 (×burn). Warnings at 25% / 10%. Empty: no cruise or jumps, throttle capped at 50%; the action button offers a fuel tender (30 units for ◈400 + ◈20/unit, can put you in debt). Docking auto-refuels as far as credits allow; price/unit by economy (Mining 3, Industrial 4, Agri/High-Tech 5, Frontier 7). Insurance tow leaves at least half a tank.
+- 3D systems: same RNG draws as before, rescaled vertically: planets on inclined orbits (up to ~24°), station ±480 m from its host planet, gates ±1.8 km, asteroid fields ±2.4 km, derelicts ±2.2 km, event/anomaly spots ±1.8–2 km. Player pitch no longer auto-levels and goes to ±77°. HUD markers show ▲/▼ when a target is >400 m above/below; system chart labels show "▲ above / ▼ below <distance>".
+- Message log: every toast is kept (last 80, saved) and readable from Pause → MESSAGE LOG.
+- Pause → SAVE & QUIT TO TITLE (saves, reloads to the title screen).
+- Gamepad: X launches a scanner probe while the system chart is open.
+
 ## 13. Completion criteria
 - Start screen loads, START enters flight.
 - Player can steer, throttle, mine an asteroid (cargo increases), dock, sell ores (credits increase), buy goods, jump to another system, sell goods there.
