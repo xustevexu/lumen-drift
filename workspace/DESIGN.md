@@ -167,6 +167,7 @@ Modules per ship (independent levels 0–3): Engine, Cargo Pod, Barrier, Beam, M
 - Message log: every toast is kept (last 80, saved) and readable from Pause → MESSAGE LOG.
 - Pause → SAVE & QUIT TO TITLE (saves, reloads to the title screen).
 - Gamepad: X launches a scanner probe while the system chart is open.
+- Gamepad free-look: right stick orbits the chase camera around the ship (up to ~171° sideways, ~66° up/down), eased in and springing back on release; steering/heading are untouched. While orbiting, the camera follows the orbit exactly so it never cuts through the hull.
 
 ## 13. Completion criteria
 - Start screen loads, START enters flight.

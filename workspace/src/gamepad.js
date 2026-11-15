@@ -73,7 +73,7 @@ export class GamepadInput {
   helpText(short = false) {
     const L = this.layout;
     const core = `L-stick steer · ${L.RT}/${L.LT} throttle · ${L.X} fire · ${L.A} action`;
-    return short ? core : `${core} · ${L.B} missile · ${L.RB} boost · ${L.Y} cruise · ${L.LB} target · ${L.BACK} map · ${L.START} pause · menus: D-pad/stick move, ${L.A} select, ${L.B} back, ${L.LB}/${L.RB} tabs, ${L.X} launch probe on the map`;
+    return short ? core : `${core} · ${L.B} missile · ${L.RB} boost · ${L.Y} cruise · ${L.LB} target · R-stick look around · ${L.BACK} map · ${L.START} pause · menus: D-pad/stick move, ${L.A} select, ${L.B} back, ${L.LB}/${L.RB} tabs, ${L.X} launch probe on the map`;
   }
 
   rumble(strong, weak = strong, ms = 120) {
@@ -99,7 +99,8 @@ export class GamepadInput {
   // ------------------------------------------------------------------ main poll (every frame)
   poll(dt) {
     const p = this.pad();
-    if (!p) return;
+    if (!p) { this.g.freeLook.x = 0; this.g.freeLook.y = 0; return; }
+    const g = this.g;
     const btn = (i) => !!p.buttons[i] && (p.buttons[i].pressed || p.buttons[i].value > 0.5);
     const val = (i) => (p.buttons[i] ? p.buttons[i].value : 0);
     const now = p.buttons.map((_, i) => btn(i));
@@ -112,6 +113,8 @@ export class GamepadInput {
     const ctx = this.context();
     if (ctx !== 'flight') this.release();
     const S = { p, btn, val, hit, lx, ly, rx, ry, dt };
+    // right stick = free-look around the ship in flight (springs back when released); nothing else in flight uses it
+    g.freeLook.x = ctx === 'flight' ? rx : 0; g.freeLook.y = ctx === 'flight' ? ry : 0;
     if (ctx === 'flight') this.flight(S);
     else if (ctx === 'map') this.mapNav(S);
     else if (ctx) this.menuNav(S, ctx);

@@ -36,6 +36,7 @@ export class Game {
     this.time = 0; this.mode = 'loading';
     this.traders = []; this.outlaws = [];
     this.input = { sx: 0, sy: 0, throttle: 0.35, fire: false, mine: false, boost: false };
+    this.freeLook = { x: 0, y: 0 }; this.lookOff = { yaw: 0, pitch: 0 }; // right-stick camera look
     this.target = null; this.autopilot = null; this.warp = null;
     this.docked = false; this.paused = false; this.shake = 0;
     this.mineAcc = 0; this.salvage = null;
@@ -1130,6 +1131,11 @@ export class Game {
   // ---------------------------------------------------------------- camera
   updateCamera(dt) {
     const p = this.player; const cam = this.camera;
+    // free-look offsets: ease toward the right stick, spring back to the chase view when it's released
+    const fl = this.freeLook, lk = this.lookOff;
+    const held = Math.abs(fl.x) + Math.abs(fl.y) > 0;
+    lk.yaw = damp(lk.yaw, fl.x * Math.PI * 0.95, held ? 7 : 4, dt);
+    lk.pitch = damp(lk.pitch, fl.y * 1.15, held ? 7 : 4, dt);
     if (this.mode === 'menu') {
       const t = this.time * 0.08; const R = HULLS[p.hullId].cam * 1.6;
       _v.set(Math.sin(t) * R, R * 0.28, Math.cos(t) * R).add(p.pos);
@@ -1138,11 +1144,12 @@ export class Game {
       return;
     }
     const D = HULLS[p.hullId].cam * (p.cruise ? 1.25 : 1) * (this.docked ? 1.8 : 1);
-    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(p.pitch * 0.75, p.yaw, 0, 'YXZ'));
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(clamp(p.pitch * 0.75 + lk.pitch, -1.45, 1.45), p.yaw + lk.yaw, 0, 'YXZ'));
     const back = _v.set(0, D * 0.3, -D).applyQuaternion(q).add(p.pos);
     if (!this.camInit) { cam.position.copy(back); this.camInit = true; }
     const k = this.warp ? 3 : 6;
-    cam.position.x = damp(cam.position.x, back.x, k, dt); cam.position.y = damp(cam.position.y, back.y, k, dt); cam.position.z = damp(cam.position.z, back.z, k, dt);
+    if (!this.warp && (held || Math.abs(lk.yaw) + Math.abs(lk.pitch) > 0.04)) cam.position.copy(back); // orbiting: follow the (already eased) orbit exactly so the camera never cuts through the hull
+    else { cam.position.x = damp(cam.position.x, back.x, k, dt); cam.position.y = damp(cam.position.y, back.y, k, dt); cam.position.z = damp(cam.position.z, back.z, k, dt); }
     // keep the camera at a minimum distance (high speed)
     _v2.subVectors(cam.position, p.pos); const dl = _v2.length();
     if (dl > D * 1.6) cam.position.copy(p.pos).addScaledVector(_v2.normalize(), D * 1.6);
