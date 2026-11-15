@@ -94,6 +94,7 @@ export class Ship {
     if (world && world.collide(this.pos, this.radius * 0.6, this.vel)) { this.speed *= 0.96; }
     // regen
     if (this.game.time - this.lastHit > 3) this.shield = Math.min(this.maxShield, this.shield + s.shieldRegen * dt);
+    if (s.hullRegen && this.game.time - this.lastHit > 5) this.hp = Math.min(this.maxHp, this.hp + this.maxHp * s.hullRegen * dt);
     if (!this.firing && !this.boost) this.energy = Math.min(this.maxEnergy, this.energy + s.energyRegen * dt);
     else this.energy = Math.min(this.maxEnergy, this.energy + s.energyRegen * 0.25 * dt);
   }

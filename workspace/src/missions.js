@@ -2,6 +2,7 @@
 // Pure data/logic here; the Game applies effects (credits, cargo, autopilot) and the UI renders.
 import { RNG } from './rng.js';
 import { COMM, COMMODITIES, ECONOMIES, HULLS, MODULES } from './data.js';
+import { FACTIONS, factionTier, standingWith } from './factions.js';
 import { generateSystem } from './galaxy.js';
 
 export const MAX_ACTIVE = 4;
@@ -53,7 +54,7 @@ export function standingOf(state, sysId) { return (state.standing && state.stand
 export function standingTier(pts) { let t = STANDING_TIERS[0], i = 0; STANDING_TIERS.forEach((x, k) => { if (pts >= x.min) { t = x; i = k - 1; } }); return { ...t, level: i }; }
 export function nextStanding(pts) { return STANDING_TIERS.find((x) => x.min > pts) || null; }
 // how much standing a finished contract earns: special jobs count double
-export function standingGain(m) { return 1 + (m.hot || m.vip || m.ore || m.priority ? 1 : 0); }
+export function standingGain(m) { return 1 + (m.hot || m.vip || m.ore || m.priority || m.exclusive ? 1 : 0); }
 
 // extra daily outlaw-raid chance while this contract is aboard
 export function missionDanger(m) { return m.vip ? 0.12 : m.hot ? 0.10 : 0; }
@@ -168,6 +169,37 @@ function makeOffer(rng, ctx, i) {
 }
 const HOT_CARGO = ['unregistered weapon cores', 'seized Lumenite bullion', 'black-box flight recorders', 'contraband stim crates', 'a smuggler\'s strongbox', 'prototype drive coils'];
 
+// Faction-flavoured premium contracts, built from the regular types.
+function makeExclusive(rng, ctx, fid, level) {
+  const { galaxy, sysId, day, dist } = ctx;
+  const F = FACTIONS[fid];
+  const pay = 1.6 + level * 0.15;
+  const r10 = (v) => Math.round(v / 10) * 10;
+  const near = (pred) => { const c = galaxy.systems.filter((s) => s.id !== sysId && dist[s.id] <= 3 && pred(s)); return c.length ? c[Math.floor(rng.next() * c.length)] : null; };
+  const base = { id: `${sysId}-${day}-x`, client: F.name, from: { sys: sysId, name: systemData(galaxy, sysId).station.name }, offeredDay: day, exclusive: fid, deposit: 0 };
+  if (fid === 'agricultural') {
+    const t = near((s) => s.eco === 'frontier' || s.eco === 'mining') || near(() => true); if (!t) return null;
+    const c = rng.next() < 0.6 ? 'food' : 'medical'; const qty = 15 + Math.floor(rng.next() * 20); const j = dist[t.id];
+    return { ...base, type: 'supply', dest: { sys: t.id, kind: 'station', name: systemData(galaxy, t.id).station.name }, jumps: j, commodity: c, qty,
+      title: `Relief convoy: ${qty} ${COMM[c].name}`, reward: r10(qty * COMM[c].base * 1.5 * pay + 300 * j), deadline: day + 2 + j * 2 };
+  }
+  if (fid === 'frontier') {
+    const t = near((s) => s.eco === 'frontier') || near(() => true); if (!t) return null;
+    const sd = systemData(galaxy, t.id); const pi = Math.floor(rng.next() * sd.planets.length); const pax = 4 + Math.floor(rng.next() * 3); const j = dist[t.id];
+    return { ...base, type: 'passenger', dest: { sys: t.id, kind: 'planet', planet: pi, name: `${sd.planets[pi].name} colony` }, jumps: j, pax, vip: false, who: 'a settler convoy',
+      title: `Settler convoy: ${pax} colonists`, reward: r10((140 + 330 * j + pax * (70 + 60 * j) + 100) * pay), deadline: day + 2 + j * 2 };
+  }
+  const spec = {
+    mining: { pick: (s) => s.eco === 'industrial', cargo: 'certified ore assays', title: 'Union assay run' },
+    industrial: { pick: (s) => s.eco === 'mining' || s.eco === 'frontier', cargo: 'prototype drive blocks', title: 'Combine prototype haul' },
+    hightech: { pick: (s) => s.eco !== 'hightech', cargo: 'sealed Institute data vaults', title: 'Institute vault transfer', hot: true },
+  }[fid];
+  const t = near(spec.pick) || near(() => true); if (!t) return null;
+  const qty = 10 + Math.floor(rng.next() * 15); const j = dist[t.id];
+  return { ...base, type: 'courier', dest: { sys: t.id, kind: 'station', name: systemData(galaxy, t.id).station.name }, jumps: j, qty, cargoName: spec.cargo, hot: !!spec.hot,
+    title: `${spec.title}: ${qty} units`, reward: r10((180 + 380 * j + qty * (9 + 6 * j)) * pay * (spec.hot ? 1.3 : 1)), deadline: day + 1 + j * 2 };
+}
+
 export function offersFor(state, galaxy, sysId, rank) {
   const key = String(sysId);
   let rec = state.offers[key];
@@ -177,6 +209,9 @@ export function offersFor(state, galaxy, sysId, rank) {
     const ctx = { galaxy, sysId, day: state.day, rank, tier, dist: jumpsFrom(galaxy, sysId) };
     const n = Math.max(2, 4 + rng.int(0, 1) + tier.offers);
     const list = []; for (let i = 0; i < n; i++) list.push(makeOffer(rng, ctx, i));
+    // faction exclusive: Friendly or better with the station's faction adds one premium job
+    const fid = galaxy.systems[sysId].eco, ft = factionTier(standingWith(state, fid));
+    if (ft.level >= 1) { const ex = makeExclusive(rng, ctx, fid, ft.level); if (ex) list.push(ex); }
     if (tier.level >= 2) for (const o of list) o.deposit = 0; // Preferred+: deposits waived
     if (tier.level >= 3) { // Partner: one priority contract a day, premium pay
       const o = list.reduce((a, b) => (b.reward > a.reward ? b : a));
@@ -197,6 +232,7 @@ export function markTaken(state, offer) {
 // ---- presentation helpers ----
 export function modTags(m) {
   const t = [];
+  if (m.exclusive) t.push({ label: `${FACTIONS[m.exclusive].short.toUpperCase()} EXCLUSIVE`, cls: 'excl' });
   if (m.priority) t.push({ label: 'PRIORITY', cls: 'prio' });
   if (m.hot) t.push({ label: 'HOT CARGO', cls: 'hot' });
   if (m.req) t.push({ label: 'DEMANDS', cls: 'req' });

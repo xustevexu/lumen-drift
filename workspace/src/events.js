@@ -29,20 +29,7 @@ export const MARKET_EVENTS = {
   frontier: { title: 'Colony rush', icon: '▲', scope: 'local', mult: { food: 1.6, medical: 1.7, parts: 1.6 }, blurb: (s) => `Settlers flood ${s}. Food, medicine and parts fetch premium prices there.` },
 };
 
-// ---------------------------------------------------------------- reputation
-export const REP_TIERS = [
-  { min: -Infinity, name: 'Distrusted', pay: -0.1, repair: 0.15 },
-  { min: 0, name: 'Unknown', pay: 0, repair: 0 },
-  { min: 5, name: 'Known', pay: 0.05, repair: -0.05 },
-  { min: 15, name: 'Trusted', pay: 0.1, repair: -0.1 },
-  { min: 30, name: 'Renowned', pay: 0.15, repair: -0.15 },
-  { min: 50, name: 'Legend', pay: 0.2, repair: -0.2 },
-];
-export function repTier(rep) { let t = REP_TIERS[0]; for (const r of REP_TIERS) if (rep >= r.min) t = r; return t; }
-export function repSummary(rep) {
-  const t = repTier(rep), pct = (x) => `${x > 0 ? '+' : ''}${Math.round(x * 100)}%`;
-  return `${t.name} (${rep})${t.pay || t.repair ? ` · contract pay ${pct(t.pay)}, repairs ${pct(t.repair)}` : ''}`;
-}
+const FACTION_SHORT = (g, sysId) => ({ agricultural: 'Cooperative', mining: 'Union', industrial: 'Combine', hightech: 'Institute', frontier: 'Settlers' })[g.galaxy.systems[sysId].eco];
 
 // ---------------------------------------------------------------- state
 export function normalizeEventState(state) {
@@ -383,11 +370,11 @@ export class SectorEvents {
     e.status = 'done';
     const credits = 400 + rng.int(0, 400) + pilotRank(this.state) * 150;
     g.addCredits(credits);
-    this.addRep(2);
+    this.g.factionChange(this.g.galaxy.systems[e.sys].eco, 3);
     let gift = '';
     const [k, q] = Object.entries(t.cargo)[0] || [];
     if (k && rng.chance(0.5)) { const n = Math.min(g.cargoFree(), Math.ceil(q * 0.4)); if (n > 0) { g.player.cargo[k] = (g.player.cargo[k] || 0) + n; t.cargo[k] -= n; gift = ` + ${n} ${COMM[k].name}`; } }
-    g.ui.toast(`${e.trader}: "You saved our hides, pilot!" +◈ ${fmt(credits)}${gift} · Reputation +2`, 'good', 5);
+    g.ui.toast(`${e.trader}: "You saved our hides, pilot!" +◈ ${fmt(credits)}${gift} · ${FACTION_SHORT(this.g, e.sys)} +3`, 'good', 5);
     g.audio.play('coins', { vol: 0.8 });
     // patched up: limps off to the station
     t.disabled = false; t.hp = Math.max(t.hp, t.maxHp * 0.6); t.throttle = 0.6; t.pitch = 0; t.roll = 0;
@@ -410,12 +397,6 @@ export class SectorEvents {
     if (r) { g.fx.particles.burst(r.pos, 30, 40, 0xffd34a, 4, 1.0); this.dematerialize(e.id, r); }
   }
 
-  addRep(n) {
-    const before = repTier(this.state.rep).name;
-    this.state.rep += n;
-    const after = repTier(this.state.rep).name;
-    if (after !== before) this.g.ui.toast(`Reputation: you are now ${after.toUpperCase()} in the sector`, n > 0 ? 'good' : 'warn', 4);
-  }
 
   // ---- pirate base ----
   onGuardDown(o) { const e = this.find(o.guardOf); if (e && e.guardsLeft > 0) e.guardsLeft--; }
@@ -435,7 +416,9 @@ export class SectorEvents {
     g.fx.dropCrate(o.pos, { lumenite: rng.int(3, 6) });
     g.fx.dropCrate(o.pos, { data: rng.int(4, 8) });
     g.state.stats.kills++;
-    this.addRep(3);
+    const local = g.galaxy.systems[g.state.systemId].eco;
+    for (const f of ['agricultural', 'mining', 'industrial', 'hightech', 'frontier']) g.factionChange(f, f === local ? 5 : 2, f !== local);
+    g.factionChange('pirate', -8);
     // recovered pirate tech: a free module level on the ship that did the job
     const rec = g.activeShipRec();
     const open = MODULE_ORDER.filter((k) => rec.mods[k] < 3);
@@ -446,7 +429,7 @@ export class SectorEvents {
       if (k === 'missile') g.player.missiles = g.player.stats.mslCap;
       tech = `Recovered pirate tech: ${MODULES[k].name} upgraded to Mk${rec.mods[k]} (free)`;
     } else { g.addCredits(3000); tech = 'Your ship is fully upgraded, so the pirate tech sold for ◈ 3,000'; }
-    g.ui.toast(`☠ ${o.name} destroyed! Loot crates released (◈ ${fmt(credits)} + cargo) · Reputation +3`, 'good', 6);
+    g.ui.toast(`☠ ${o.name} destroyed! Loot crates released (◈ ${fmt(credits)} + cargo) · all factions grateful, Red Wake −8`, 'good', 6);
     setTimeout(() => g.ui.toast(`⚙ ${tech}`, 'good', 6), 1200);
     g.save();
   }

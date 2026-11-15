@@ -105,7 +105,7 @@ Modules per ship (independent levels 0–3): Engine, Cargo Pod, Barrier, Beam, M
 - market (3%, 2–3 days, max 2 active): economy-specific shock (blight/collapse/strike/glut/colony rush); full effect at origin, 70% elsewhere for sector-wide ones. `priceMult` in economy.js.
 - base (3.5%, ×2 frontier, 3 days, max 1, never the start system, from day 3): pirate fortress on a derelict (static armed Ship, `buildPirateBaseTemplate`), launches 2–4 guards inside 2.2 km; destroying it drops big loot + one free module level.
 - wreck: passenger tip from a contract (see 12d); salvage within 160 m.
-- Reputation (`state.rep`, global): rescues +2, saving traders +1, bases +3, attacking traders −3. Tiers adjust contract pay (−10%…+20%) and repairs (+15%…−20%).
+- (The earlier global `state.rep` was folded into factions — see 12e; old saves migrate rep/2 into each lawful faction.)
 - Debug: `?event=distress|vein|market|base` (`&trap=1` for a lure).
 
 ## 12d. Contract modifiers & station standing (src/missions.js)
@@ -114,6 +114,15 @@ Modules per ship (independent levels 0–3): Engine, Cargo Pod, Barrier, Beam, M
 - VIP `req` (~60%): demands a hull (Kestrel/Bastion or Mule) or module level; +30% pay; checked at accept.
 - Supply `ore` (~26%): also needs N Lumenite/Cobaltine/Helion mined by the player while the contract is active (`oreMined` counter); bought ore doesn't count.
 - Station standing (`state.standing[sysId]`): +1 per completed contract from that station (+2 for special jobs), −2 failed, −1 abandoned. Tiers: Blacklisted (<−2: −2 offers, −15% pay), New face, Regular (3: +5%), Preferred (8: +10%, +1 offer, no deposits), Partner (15: +15%, daily Priority contract ×1.35). Each tier above New face also raises special-contract odds by 7 points.
+
+## 12e. Factions (src/factions.js)
+- Six factions: Verdant Cooperative (agricultural), Deepcore Union (mining), Forge Combine (industrial), Lumen Institute (high-tech), Free Settlers (frontier), Red Wake (pirates). A system belongs to its economy's faction; traders belong to their origin system's faction.
+- Rivals: Cooperative ↔ Combine, Union ↔ Institute. Settlers' enemy is the Red Wake.
+- Standing (`state.factions`): contract from a faction station +2/+3 (exclusive +4), rival −1; selling at their station +1 per ◈1,500 (max +4/day, `state.sales`); outlaw kill +1 local, Red Wake −1; rescue +3; pirate base +5 local / +2 other lawful / Red Wake −8; attacking a trader −6 (destroying it −6 more), victim's rival +1, Red Wake +2/+3; killing enforcers −3.
+- Tiers: Hostile (≤−25), Unfriendly (−24), Neutral (−7), Friendly (10), Honored (25), Allied (50). Lawful effects at their stations: buy/sell prices ±3–12%, repairs ±10–30%, Friendly+ adds a daily exclusive contract (makeExclusive), Honored+ sells their unique module, Unfriendly/Hostile sends enforcers (12%/30% per day in their space; white Kestrels that only hunt the player, no bounty).
+- Red Wake tier scales pirate raid chance (×1.6 Hostile … ×0.3 Allied); Honored+ unlocks the Ghost Transponder at Frontier stations.
+- Unique modules (`ship.uniques`, 1 slot, 2 on Bastion, `applyUniques`): Bio-Weave Plating (hull regen), Deepcore Drill Head (+40% mining, +5 pts rare), Forge Overcharger (+25% beam), Lumen Lattice (+35% barrier, +25% regen), Drift Engine (+15% speed, cruise can't be disrupted), Ghost Transponder (raid chance ×0.5). Removal refunds 50%.
+- Debug: `?enforcers=1` forces an enforcer raid today.
 
 ## 13. Completion criteria
 - Start screen loads, START enters flight.

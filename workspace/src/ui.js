@@ -3,7 +3,8 @@ import { COMMODITIES, COMM, ECONOMIES, HULLS, HULL_ORDER, MODULES, MODULE_ORDER,
 import { fmt, clamp } from './rng.js';
 import { pilotRank, netWorth, RANK_NAMES } from './economy.js';
 import { SLOT_COUNT, autoInfo, readSlot, writeSlot, summarize, exportText, exportName, parseImport, ago } from './save.js';
-import { liveEvents, describe, eventIcon, repTier, repSummary } from './events.js';
+import { liveEvents, describe, eventIcon } from './events.js';
+import { FACTIONS, FACTION_ORDER, UNIQUES, UNIQUE_BY_FACTION, factionTier, nextFactionTier, standingWith, tierPerks, uniqueSlots } from './factions.js';
 import { MAX_ACTIVE, offersFor, missionSpace, boundToShip, typeTag, modTags, destText, needText, dueText, reqMet, reqText, standingOf, standingTier, nextStanding } from './missions.js';
 
 const $ = (id) => document.getElementById(id);
@@ -152,7 +153,7 @@ export class UI {
   warpFlash(on) { $('warpFlash').classList.toggle('on', on); }
   onSystemChanged() {
     const s = this.g.sysInfo; if (!s) return;
-    $('sysName').textContent = s.name; $('sysEco').textContent = `${ECONOMIES[s.eco].name} · risk ${Math.round(s.danger * 100)}%`;
+    $('sysName').textContent = s.name; $('sysEco').textContent = `${ECONOMIES[s.eco].name} · ${FACTIONS[s.eco].short} · risk ${Math.round(s.danger * 100)}%`;
     if (this.mapView) this.resetMapView('system');
   }
 
@@ -472,7 +473,7 @@ export class UI {
   renderStation() {
     const g = this.g, s = g.state, sid = s.systemId, sys = g.sysInfo, p = g.player;
     $('stTitle').textContent = g.world.station.name.toUpperCase();
-    $('stSub').textContent = `${sys.name} · ${ECONOMIES[sys.eco].name} economy · Day ${s.day} · ${HULLS[p.hullId].name} (${HULLS[p.hullId].cls})`;
+    $('stSub').textContent = `${sys.name} · ${FACTIONS[sys.eco].name} (${factionTier(standingWith(s, sys.eco)).name}) · Day ${s.day} · ${HULLS[p.hullId].name} (${HULLS[p.hullId].cls})`;
     $('stCred').textContent = `◈ ${fmt(s.credits)}`;
     [...$('stTabs').children].forEach((t) => t.classList.toggle('on', t.dataset.tab === this.stTab));
     const body = $('stBody');
@@ -524,9 +525,30 @@ export class UI {
     return h;
   }
 
+  uniquePrice(id, hull) { return Math.round(UNIQUES[id].price * Math.sqrt(HULLS[hull].priceMul) / 100) * 100; }
+  factionTechHTML(rec) {
+    const g = this.g, s = g.state, fid = g.sysInfo.eco;
+    const offers = [UNIQUE_BY_FACTION[fid]];
+    if (fid === 'frontier') offers.push(UNIQUE_BY_FACTION.pirate); // the Red Wake sells quietly on the frontier
+    const slots = uniqueSlots(rec.hull), used = rec.uniques.length;
+    let h = `<div class="ms-head"><span>FACTION TECH · ${used}/${slots} SLOT${slots > 1 ? 'S' : ''} USED</span><small>Unique modules need Honored standing with their faction</small></div><div class="cards">`;
+    for (const id of rec.uniques) {
+      const u = UNIQUES[id];
+      h += `<div class="card active"><h3>${u.name}<span class="cls">INSTALLED</span></h3><p>${u.desc}</p><button class="pbtn secondary" style="font-size:13px;padding:8px" data-act="rmunique" data-arg="${id}">REMOVE · refund ◈ ${fmt(Math.round(this.uniquePrice(id, rec.hull) / 2))}</button></div>`;
+    }
+    for (const u of offers) {
+      if (rec.uniques.includes(u.id)) continue;
+      const t = factionTier(standingWith(s, u.faction)), price = this.uniquePrice(u.id, rec.hull);
+      const why = t.level < 2 ? `REQUIRES HONORED WITH ${FACTIONS[u.faction].short.toUpperCase()} (${standingWith(s, u.faction)}/25)` : used >= slots ? 'NO FREE SLOT' : s.credits < price ? `◈ ${fmt(price)}` : '';
+      h += `<div class="card${t.level < 2 ? ' locked' : ''}"><h3>${u.name}<span class="cls" style="color:${FACTIONS[u.faction].color}">${FACTIONS[u.faction].short.toUpperCase()}</span></h3><p>${u.desc}</p>
+        <button class="pbtn ${why ? 'secondary' : 'primary'}" style="font-size:13px;padding:8px" data-act="buyunique" data-arg="${u.id}" ${why ? 'disabled' : ''}>${why || `INSTALL · ◈ ${fmt(price)}`}</button></div>`;
+    }
+    return h + '</div><div class="ms-head" style="margin-top:12px"><span>STANDARD MODULES</span></div>';
+  }
   outfitHTML() {
     const g = this.g, rec = g.activeShipRec();
     let h = `<p style="margin:2px 4px 10px;font:700 13px var(--font)">Upgrading: <b>${HULLS[rec.hull].name}</b> (${HULLS[rec.hull].cls}) — each ship keeps its own modules.</p><div class="cards">`;
+    h = this.factionTechHTML(rec) + h;
     for (const k of MODULE_ORDER) {
       const M = MODULES[k], lvl = rec.mods[k];
       const next = lvl < 3 ? lvl + 1 : null;
@@ -558,12 +580,24 @@ export class UI {
     return h + '</div>';
   }
 
-  repairCost() { const p = this.g.player; return Math.ceil(Math.ceil(p.maxHp - p.hp) * 1.5 * HULLS[p.hullId].priceMul * (1 + repTier(this.g.state.rep).repair)); }
+  repairCost() { const p = this.g.player; return Math.ceil(Math.ceil(p.maxHp - p.hp) * 1.5 * HULLS[p.hullId].priceMul * (1 + factionTier(standingWith(this.g.state, this.g.sysInfo.eco)).repair)); }
   newsHTML() {
     const g = this.g, s = g.state, evs = liveEvents(s);
     if (!evs.length) return '<div class="card news"><div><h3>Sector News</h3><p>Quiet across the sector today.</p></div></div>';
     const here = (e) => e.sys === s.systemId ? ' <small>(this system)</small>' : '';
     return `<div class="card news"><div><h3>Sector News · Day ${s.day}</h3>${evs.map((e) => { const d = describe(e, g.galaxy, s, g.player.stats.sensorLvl); return `<p><b style="color:${d.col}">${d.ch}</b> <b>${d.title}</b>${here(e)}: ${d.line}</p>`; }).join('')}</div></div>`;
+  }
+  factionsHTML() {
+    const g = this.g, s = g.state, here = g.sysInfo.eco;
+    const rows = FACTION_ORDER.map((f) => {
+      const F = FACTIONS[f], pts = standingWith(s, f), t = factionTier(pts), nx = nextFactionTier(pts);
+      const lo = t.min === -Infinity ? -50 : t.min, hi = nx ? nx.min : lo + 25;
+      const pct = Math.max(0, Math.min(100, ((pts - lo) / (hi - lo)) * 100));
+      return `<div class="fac${f === here ? ' here' : ''}"><div class="fac-top"><i style="background:${F.color}"></i><b>${F.name}</b>${f === here ? ' <small>(this station)</small>' : ''}<span class="fac-tier t${t.level}">${t.name.toUpperCase()}</span><small>${pts}</small></div>
+        <div class="fac-bar"><span style="width:${pct}%;background:${F.color}"></span></div>
+        <small>${tierPerks(f, t) || '—'}${nx ? ` · next: ${nx.name} at ${nx.min}` : ''}</small></div>`;
+    }).join('');
+    return `<div class="card factions"><div><h3>Factions</h3><p style="opacity:.75;font-size:12px">Contracts, trade, outlaw kills and rescues raise standing with a station's faction; attacking its traders lowers it. Rivals: Cooperative ↔ Combine, Union ↔ Institute. The Red Wake likes piracy and hates outlaw-hunters.</p>${rows}</div></div>`;
   }
   servicesHTML() {
     const g = this.g, p = g.player, s = g.state;
@@ -577,8 +611,9 @@ export class UI {
       <div class="card"><div><h3>Hull Repair</h3><p>${missing > 0 ? `${missing} damage to patch` : 'Hull is pristine'}</p></div><button class="sbtn buy" data-act="repair" ${missing > 0 && s.credits >= repair ? '' : 'disabled'}>◈ ${fmt(repair)}</button></div>
       <div class="card"><div><h3>Missile Restock</h3><p>${p.stats.mslCap ? `${p.missiles}/${p.stats.mslCap} loaded · ◈60 each` : 'No missile rack installed'}</p></div><button class="sbtn buy" data-act="missiles" ${mslNeed > 0 && s.credits >= mslCost ? '' : 'disabled'}>◈ ${fmt(mslCost)}</button></div>
       ${this.newsHTML()}
+      ${this.factionsHTML()}
       <div class="card"><div><h3>Rest Until Tomorrow</h3><p>Skip to Day ${s.day + 1}. Prices recover, rocks and deposits regrow, new events may appear.${restNote}</p></div><button class="sbtn" data-act="rest">REST</button></div>
-      <div class="card"><div><h3>Pilot Record</h3><p>Rank <b>${RANK_NAMES[r]}</b> · Net worth ◈ ${fmt(netWorth(s))}<br>Mined ${s.stats.mined} · Trades ${s.stats.trades} · Contracts ${s.stats.contracts} · Outlaws downed ${s.stats.kills} · Jumps ${s.stats.jumps}<br>Reputation: <b>${repSummary(s.rep)}</b></p></div></div>
+      <div class="card"><div><h3>Pilot Record</h3><p>Rank <b>${RANK_NAMES[r]}</b> · Net worth ◈ ${fmt(netWorth(s))}<br>Mined ${s.stats.mined} · Trades ${s.stats.trades} · Contracts ${s.stats.contracts} · Outlaws downed ${s.stats.kills} · Jumps ${s.stats.jumps}</p></div></div>
       <p style="font:600 12px var(--font);opacity:.75">Outlaw raids grow from lone raiders to packs of 2–4 as your rank rises. Barriers and beams are your best insurance.</p>
     </div>`;
   }
@@ -588,7 +623,7 @@ export class UI {
     const offers = offersFor(s, g.galaxy, s.systemId, pilotRank(s));
     const pts = standingOf(s, s.systemId), tier = standingTier(pts), nx = nextStanding(pts);
     let h = `<div class="standing"><b>Standing at ${g.world.station.name}:</b> <span class="st-tier st-${tier.level}">${tier.name.toUpperCase()}</span> <small>(${pts} pts)</small>${tier.perks ? `<br><small>${tier.perks}</small>` : ''}${nx ? `<br><small style="opacity:.75">Next: ${nx.name} at ${nx.min} pts. Completing this station's contracts earns standing (special jobs count double); failing loses it.</small>` : ''}</div>`;
-    h += `<div class="ms-head"><span>ACTIVE CONTRACTS ${s.missions.length}/${MAX_ACTIVE}</span><small>Free hold ${g.cargoFree()}/${p.stats.cargo}${repTier(s.rep).pay ? ` · ${repTier(s.rep).name}: pay ${repTier(s.rep).pay > 0 ? '+' : ''}${Math.round(repTier(s.rep).pay * 100)}%` : ''}</small></div>`;
+    h += `<div class="ms-head"><span>ACTIVE CONTRACTS ${s.missions.length}/${MAX_ACTIVE}</span><small>Free hold ${g.cargoFree()}/${p.stats.cargo}</small></div>`;
     h += s.missions.length ? `<div class="cards">${s.missions.map((m) => this.missionCard(m, true)).join('')}</div>` : '<p class="ms-empty">No active contracts — pick one from the board below.</p>';
     h += `<div class="ms-head" style="margin-top:14px"><span>CONTRACT BOARD · ${g.world.station.name.toUpperCase()}</span><small>New offers each day</small></div>`;
     h += offers.length ? `<div class="cards">${offers.map((o) => this.missionCard(o, false)).join('')}</div>` : '<p class="ms-empty">The board is empty. Check back tomorrow.</p>';
@@ -624,15 +659,24 @@ export class UI {
   stationAction(act, arg, n) {
     const g = this.g, E = g.economy, s = g.state, sid = s.systemId, p = g.player; n = Number(n);
     const sell = (cid, q) => { if (q <= 0) return 0; const v = E.sell(sid, cid, q); p.cargo[cid] -= q; if (!p.cargo[cid]) delete p.cargo[cid]; return v; };
-    if (act === 'sell') { const v = sell(arg, Math.min(n, p.cargo[arg] || 0)); g.addCredits(v); s.stats.trades++; g.audio.play('coins', { vol: 0.7 }); }
+    if (act === 'sell') { const v = sell(arg, Math.min(n, p.cargo[arg] || 0)); g.addCredits(v); g.onSale(v); s.stats.trades++; g.audio.play('coins', { vol: 0.7 }); }
     else if (act === 'sellore' || act === 'sellall') {
       let v = 0; for (const k of Object.keys(p.cargo)) if (act === 'sellall' || COMM[k].kind === 'ore') v += sell(k, p.cargo[k]);
-      g.addCredits(v); s.stats.trades++; g.audio.play('coins', { vol: 0.8 }); this.toast(`Sold for ◈ ${fmt(v)}`, 'good', 2);
+      g.addCredits(v); g.onSale(v); s.stats.trades++; g.audio.play('coins', { vol: 0.8 }); this.toast(`Sold for ◈ ${fmt(v)}`, 'good', 2);
     } else if (act === 'buy') {
       let q = Math.min(n, E.stock(sid, arg), p.stats.cargo - p.cargoUsed());
       while (q > 0 && E.quoteBuy(sid, arg, q) > s.credits) q--;
       if (q > 0) { const cost = E.buy(sid, arg, q); s.credits -= cost; p.cargo[arg] = (p.cargo[arg] || 0) + q; s.stats.trades++; g.audio.play('click', { vol: 0.6 }); }
       else this.toast('Not enough credits or cargo space', 'warn', 2);
+    } else if (act === 'buyunique') {
+      const rec = g.activeShipRec(), price = this.uniquePrice(arg, rec.hull);
+      if (s.credits >= price && rec.uniques.length < uniqueSlots(rec.hull) && factionTier(standingWith(s, UNIQUES[arg].faction)).level >= 2) {
+        s.credits -= price; rec.uniques.push(arg); g.refreshPlayerStats(); p.shield = Math.min(p.shield, p.maxShield);
+        g.audio.play('coins', { vol: 0.9 }); this.toast(`${UNIQUES[arg].name} installed`, 'good', 3);
+      }
+    } else if (act === 'rmunique') {
+      const rec = g.activeShipRec();
+      if (rec.uniques.includes(arg)) { rec.uniques = rec.uniques.filter((x) => x !== arg); g.addCredits(Math.round(this.uniquePrice(arg, rec.hull) / 2)); g.refreshPlayerStats(); this.toast(`${UNIQUES[arg].name} removed`, 'info', 2.5); }
     } else if (act === 'upgrade') {
       const rec = g.activeShipRec(); const lvl = rec.mods[arg] + 1; const price = modulePrice(rec.hull, arg, lvl);
       if (s.credits >= price && lvl <= 3) {
@@ -999,7 +1043,8 @@ export class UI {
       const there = g.state.missions.filter((m) => m.dest.sys === s.id);
       const ms = there.length ? `<p style="color:#9a6a00"><b>★ Contracts here:</b> ${there.map((m) => `${m.title} → ${m.dest.name} (due Day ${m.deadline})`).join('; ')}</p>` : '';
       const evs = liveEvents(g.state).filter((e) => e.sys === s.id).map((e) => { const d = describe(e, g.galaxy, g.state, g.player.stats.sensorLvl); return `<p><b style="color:${d.col}">${d.ch}</b> <b>${d.title}:</b> ${d.line}</p>`; }).join('');
-      box.innerHTML = `<h4>${s.name}</h4><p>${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * 100)}%/day</p>${evs}${ms}${rows}${btn}`;
+      const ft = factionTier(standingWith(g.state, s.eco));
+      box.innerHTML = `<h4>${s.name}</h4><p>${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * 100)}%/day</p><p><b style="color:${FACTIONS[s.eco].color}">${FACTIONS[s.eco].name}</b> · you are <b>${ft.name}</b>${ft.level <= -1 ? ' <span style="color:#ff6b4a">(enforcers may hunt you)</span>' : ''}</p>${evs}${ms}${rows}${btn}`;
     }
   }
   mapAction(act) {

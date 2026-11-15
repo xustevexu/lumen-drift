@@ -14,7 +14,8 @@ import { Post } from './post.js';
 import { Audio } from './audio.js';
 import { UI } from './ui.js';
 import { GamepadInput } from './gamepad.js';
-import { SectorEvents, normalizeEventState, repTier } from './events.js';
+import { SectorEvents, normalizeEventState } from './events.js';
+import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
 import { RNG, clamp, damp, fmt } from './rng.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
@@ -61,7 +62,7 @@ export class Game {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveOnLeave(); });
     window.addEventListener('pagehide', saveOnLeave);
     this.state = saved || newState(params.get('seed') ? Number(params.get('seed')) : Math.floor(Math.random() * 1e9));
-    normalizeMissionState(this.state); normalizeEventState(this.state);
+    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state);
     this.hasSave = !!saved;
     this.applyQuality(this.state.quality);
 
@@ -129,7 +130,7 @@ export class Game {
     if (fresh) {
       clearAuto();
       const seed = Math.floor(Math.random() * 1e9);
-      this.state = newState(seed);
+      this.state = normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed))));
       this.galaxy = generateGalaxy(seed);
       this.economy = new Economy(this.galaxy, this.state);
       this.state.systemId = this.galaxy.startId;
@@ -151,7 +152,7 @@ export class Game {
   spawnPlayer(pos, yaw = 0) {
     const rec = this.activeShipRec();
     if (this.player) this.player.remove();
-    const stats = computeStats(rec.hull, rec.mods);
+    const stats = this.shipStats(rec);
     const p = new Ship(this, { kind: 'player', hullId: rec.hull, palette: 'player', stats, name: HULLS[rec.hull].name });
     p.cargo = rec.cargo; // shared reference with save record
     if (rec.hp != null) p.hp = Math.min(p.maxHp, rec.hp);
@@ -170,9 +171,10 @@ export class Game {
     const rec = this.activeShipRec(); if (!rec || !this.player) return;
     rec.hp = this.player.hp; rec.missiles = this.player.missiles;
   }
+  shipStats(rec) { return applyUniques(computeStats(rec.hull, rec.mods), rec.uniques); }
   refreshPlayerStats() {
     const rec = this.activeShipRec();
-    const stats = computeStats(rec.hull, rec.mods);
+    const stats = this.shipStats(rec);
     this.player.applyStats(stats, false);
     this.player.missiles = Math.min(this.player.missiles, stats.mslCap);
   }
@@ -279,10 +281,15 @@ export class Game {
     let roll = this.state.outlawRoll[key];
     if (!roll) {
       const force = params.get('outlaws') === '1';
-      // VIPs and hot cargo aboard draw extra outlaw attention
-      const danger = this.sysInfo.danger + Math.max(0, ...this.missionsAboard().map(missionDanger));
-      const hit = force || Math.random() < danger;
-      roll = { hit, at: hit ? Math.min(0.95, this.state.dayTime + (force ? 0.02 : 0.08 + Math.random() * 0.5)) : null, spawned: false, warned: false };
+      // VIPs and hot cargo aboard draw extra outlaw attention; Red Wake standing and a Ghost Transponder change how often they come
+      const rw = factionTier(standingWith(this.state, 'pirate')).raid * (this.player && this.player.stats.ghost ? 0.5 : 1);
+      const danger = (this.sysInfo.danger + Math.max(0, ...this.missionsAboard().map(missionDanger))) * rw;
+      let hit = force || Math.random() < danger, enforcer = null;
+      // hostile lawful faction: their enforcers may come for you in their own space
+      const own = this.sysInfo.eco, ot = factionTier(standingWith(this.state, own));
+      if (!hit && ot.level <= -1 && Math.random() < (ot.level <= -2 ? 0.3 : 0.12)) { hit = true; enforcer = own; }
+      if (params.get('enforcers') === '1') { hit = true; enforcer = own; }
+      roll = { hit, enforcer, at: hit ? Math.min(0.95, this.state.dayTime + (force || enforcer && params.get('enforcers') ? 0.02 : 0.08 + Math.random() * 0.5)) : null, spawned: false, warned: false };
       // keep save small: only keep current rolls
       this.state.outlawRoll = { [key]: roll };
     }
@@ -310,11 +317,13 @@ export class Game {
         speed: 82 + rank * 4, turn: 1.55, cargo: 40, shield: Math.round((30 + rank * 35) * tough), shieldRegen: 5 + rank * 2, hull: Math.round((90 + rank * 50) * tough),
         dps: (7 + rank * 3.5) * tough, beamRange: 250, hard: 1, mslCap: rank >= 2 ? 2 : 0, mslDmg: 40 + rank * 8, energy: 120, energyRegen: 18, sensor: 3000,
       };
-      const o = new Ship(this, { kind: 'outlaw', hullId: 'kestrel', palette: 'outlaw', tpl: this.outlawTpl || buildShipTemplate('kestrel', 'outlaw'), stats, name: n > 1 ? `${base} ${['α', 'β', 'γ', 'δ'][i]}` : base });
+      const tpl = opts.faction ? buildShipTemplate('kestrel', 'player') : this.outlawTpl || buildShipTemplate('kestrel', 'outlaw');
+      const o = new Ship(this, { kind: 'outlaw', hullId: 'kestrel', palette: 'outlaw', tpl, stats, name: n > 1 ? `${base} ${['α', 'β', 'γ', 'δ'][i]}` : base });
+      o.faction = opts.faction || null;
       o.pos.copy(entry).add(_v.set((Math.random() - 0.5) * 140, (Math.random() - 0.5) * 50, (Math.random() - 0.5) * 140));
       _v.subVectors(this.player.pos, o.pos); o.yaw = Math.atan2(_v.x, _v.z);
       o.throttle = 1; o.state = 'hunt'; o.missiles = stats.mslCap; o.mslCd = 6 + Math.random() * 6; o.retarget = 0; o.orbitDir = Math.random() < 0.5 ? 1 : -1;
-      o.beam = this.fx.makeBeam(0xff4a3a); o.spawnTime = this.time; o.guardOf = opts.guardOf || null;
+      o.beam = this.fx.makeBeam(opts.faction ? 0xffa040 : 0xff4a3a); o.spawnTime = this.time; o.guardOf = opts.guardOf || null;
       o.cargo = { [['food', 'medical', 'parts', 'data'][Math.floor(Math.random() * 4)]]: 3 + Math.floor(Math.random() * 8) };
       this.outlaws.push(o);
     }
@@ -333,7 +342,14 @@ export class Game {
       this.ui.toast(`Sensors: hostile jump signature forming — outlaws inbound in ~${Math.round((roll.at - this.state.dayTime) * DAY_LENGTH)}s`, 'warn', 6);
       this.audio.play('alarm', { vol: 0.5 });
     }
-    if (this.state.dayTime >= roll.at && !this.docked) { roll.spawned = true; this.spawnOutlaws(); }
+    if (this.state.dayTime >= roll.at && !this.docked) {
+      roll.spawned = true;
+      if (roll.enforcer) {
+        const F = FACTIONS[roll.enforcer], rank = pilotRank(this.state);
+        this.spawnOutlaws({ n: 1 + Math.min(2, Math.floor(rank / 2)) + (factionTier(standingWith(this.state, roll.enforcer)).level <= -2 ? 1 : 0), name: `${F.short} Enforcer`, faction: roll.enforcer, tough: 1.15,
+          toast: `⚠ ${F.name} enforcers jumped in. They're here for you.` });
+      } else this.spawnOutlaws();
+    }
   }
 
   pickOutlawTarget(o) {
@@ -355,7 +371,7 @@ export class Game {
       if (o.dead) { this.outlaws.splice(i, 1); continue; }
       if (o.static) { this.updateTurret(o, dt); continue; }
       o.retarget -= dt;
-      if (o.state !== 'flee' && (o.retarget <= 0 || !o.tgt || o.tgt.dead)) { o.tgt = this.pickOutlawTarget(o); o.retarget = 4; }
+      if (o.state !== 'flee' && (o.retarget <= 0 || !o.tgt || o.tgt.dead)) { o.tgt = o.faction ? (this.docked ? null : this.player) : this.pickOutlawTarget(o); o.retarget = 4; }
       // retaliate against whoever is shooting at us
       if (o.state !== 'flee' && o.lastAttacker && !o.lastAttacker.dead && this.time - o.lastHit < 10 && !(o.lastAttacker === this.player && this.docked)) o.tgt = o.lastAttacker;
       if (o.hp < o.maxHp * 0.22 && o.state !== 'flee') { o.state = 'flee'; this.ui.toast(`${o.name} is breaking off!`, 'info', 2.5); }
@@ -393,7 +409,7 @@ export class Game {
         o.mslCd -= dt;
         if (o.missiles > 0 && o.mslCd <= 0 && d < 700 && aim < 0.6) { o.missiles--; o.mslCd = 9; this.fx.launchMissile(o, t, o.stats.mslDmg); if (t === this.player) this.ui.toast('⚠ Incoming missile!', 'warn', 2); }
         // interdiction
-        if (t === this.player && d < 1300 && this.player.cruise) { this.player.cruise = false; this.ui.toast('Cruise disrupted by outlaw interdiction!', 'warn', 3); this.autopilot = null; }
+        if (t === this.player && d < 1300 && this.player.cruise && !this.player.stats.noInterdict) { this.player.cruise = false; this.ui.toast('Cruise disrupted by outlaw interdiction!', 'warn', 3); this.autopilot = null; }
       }
       if (!o.firing && o.beam) o.beam.visible = false;
       o.updateMotion(dt, this.world); o.updateVisual(dt);
@@ -439,7 +455,7 @@ export class Game {
   onShipHit(ship, attacker, killed) {
     if (ship.kind === 'trader' && attacker === this.player) {
       const sid = this.state.systemId;
-      if (!ship.reported) { ship.reported = true; this.state.wanted[sid] = (this.state.wanted[sid] || 0) + 1; this.ui.toast(`Trader ${ship.name} reports your attack — WANTED in ${this.sysInfo.name} · Reputation −3`, 'warn', 4); this.events.addRep(-3); }
+      if (!ship.reported) { ship.reported = true; this.state.wanted[sid] = (this.state.wanted[sid] || 0) + 1; this.ui.toast(`Trader ${ship.name} reports your attack — WANTED in ${this.sysInfo.name} `, 'warn', 4); this.traderCrime(ship, 6, 2); }
     }
     if (ship.kind === 'trader' && attacker && attacker.kind === 'outlaw' && !ship.distress && ship.pos.distanceTo(this.player.pos) < this.player.stats.sensor) {
       ship.distress = true; this.ui.toast(`Distress call: trader ${ship.name} under outlaw attack!`, 'warn', 4);
@@ -457,17 +473,24 @@ export class Game {
     const entries = Object.entries(ship.cargo).filter(([, q]) => q > 0);
     for (const [k, q] of entries) { let left = Math.ceil(q * 0.7); while (left > 0) { const n = Math.min(left, 10); this.fx.dropCrate(ship.pos, { [k]: n }); left -= n; } }
     if (ship.kind === 'outlaw') {
-      if (attacker === this.player) {
+      if (attacker === this.player && ship.faction) {
+        // you shot down lawful enforcers: no bounty, and their faction won't forget
+        this.state.stats.kills++;
+        this.factionChange(ship.faction, -3);
+        this.ui.toast(`${ship.name} destroyed. ${FACTIONS[ship.faction].short} standing −3`, 'warn', 3);
+      } else if (attacker === this.player) {
         const rank = pilotRank(this.state);
         const bounty = 350 + rank * 200;
+        this.factionChange(this.sysInfo.eco, 1, true); this.factionChange('pirate', -1, true);
         this.fx.dropCrate(ship.pos, {}, bounty);
         this.state.stats.kills++;
         this.ui.toast(`${ship.name} destroyed — bounty crate released (◈ ${fmt(bounty)})`, 'good', 3.5);
         // rescued traders
-        for (const t of this.traders) if (t.distress && !t.rewarded && t.pos.distanceTo(ship.pos) < 1500) { t.rewarded = true; this.addCredits(250); this.events.addRep(1); this.ui.toast(`${t.name}: “Thank you, pilot!” +◈ 250 · Reputation +1`, 'good', 3); }
+        for (const t of this.traders) if (t.distress && !t.rewarded && t.pos.distanceTo(ship.pos) < 1500) { t.rewarded = true; this.addCredits(250); this.factionChange(this.traderFaction(t), 1, true); this.ui.toast(`${t.name}: “Thank you, pilot!” +◈ 250 · ${FACTIONS[this.traderFaction(t)].short} +1`, 'good', 3); }
       }
       if (ship.beam) ship.beam.visible = false;
     }
+    if (ship.kind === 'trader' && attacker === this.player) this.traderCrime(ship, 6, 3, true);
     if (ship.kind === 'trader' && attacker && attacker.kind === 'outlaw') this.ui.toast(`Trader ${ship.name} was destroyed by outlaws.`, 'warn', 3);
     if (this.target === ship) this.target = null;
     ship.remove();
@@ -494,6 +517,34 @@ export class Game {
           this.dock();
         } }]);
     }, 1600);
+  }
+
+  // ------------------------------------------------------------- factions
+  traderFaction(t) { return this.galaxy.systems[t.origin != null ? t.origin : this.state.systemId].eco; }
+  // attacking (or destroying) a lawful trader: their faction hates it, their rival quietly approves, the Red Wake likes it
+  traderCrime(t, loss, pirateGain, killed = false) {
+    const f = this.traderFaction(t), rival = FACTIONS[f].rival;
+    this.factionChange(f, -loss);
+    if (rival && rival !== 'pirate') this.factionChange(rival, 1, true);
+    this.factionChange('pirate', pirateGain, true);
+    this.ui.toast(`${killed ? 'Destroying' : 'Attacking'} a ${FACTIONS[f].short} trader: ${FACTIONS[f].short} −${loss}, Red Wake +${pirateGain}`, 'warn', 3.5);
+  }
+  factionChange(fid, n, quiet = false) {
+    if (!n) return;
+    const s = this.state, before = factionTier(standingWith(s, fid));
+    s.factions[fid] = standingWith(s, fid) + n;
+    const after = factionTier(s.factions[fid]);
+    if (after.name !== before.name) setTimeout(() => this.ui.toast(`${n > 0 ? '▲' : '▼'} ${FACTIONS[fid].name}: you are now ${after.name.toUpperCase()}`, n > 0 ? 'good' : 'warn', 6), 700);
+    void quiet;
+  }
+  // selling at a station counts as doing business with its faction (+1 per ◈1,500, up to +4 a day)
+  onSale(value) {
+    const s = this.state, fid = this.sysInfo.eco;
+    if (s.sales.day !== s.day) s.sales = { day: s.day, by: {} };
+    const before = Math.min(4, Math.floor((s.sales.by[fid] || 0) / 1500));
+    s.sales.by[fid] = (s.sales.by[fid] || 0) + value;
+    const after = Math.min(4, Math.floor(s.sales.by[fid] / 1500));
+    if (after > before) this.factionChange(fid, after - before, true);
   }
 
   addCredits(n) { this.state.credits += n; if (n > 0) this.state.stats.earned += n; this.ui.creditFlash(); }
@@ -568,7 +619,7 @@ export class Game {
 
   // Replace the whole career with a loaded save (slot, autosave or imported file).
   loadGame(state) {
-    this.state = normalizeEventState(normalizeMissionState(state));
+    this.state = normalizeFactionState(normalizeEventState(normalizeMissionState(state)));
     this.galaxy = generateGalaxy(state.seed);
     this.economy = new Economy(this.galaxy, state);
     if (state.systemId == null) state.systemId = this.galaxy.startId;
@@ -689,14 +740,16 @@ export class Game {
       if (m.ore) { this.player.cargo[m.ore] -= m.oreQty; if (!this.player.cargo[m.ore]) delete this.player.cargo[m.ore]; }
     }
     s.missions = s.missions.filter((x) => x !== m);
-    const repBonus = Math.round(m.reward * repTier(s.rep).pay);
-    this.addCredits(m.reward + repBonus + m.deposit);
+    this.addCredits(m.reward + m.deposit);
+    const cf = this.galaxy.systems[m.from.sys].eco, fGain = m.exclusive ? 4 : standingGain(m) + 1;
+    this.factionChange(cf, fGain);
+    if (FACTIONS[cf].rival && FACTIONS[cf].rival !== 'pirate') this.factionChange(FACTIONS[cf].rival, -1, true);
     s.stats.contracts++;
     this.changeStanding(m.from.sys, standingGain(m));
     this.updateMissionLoad();
     this.audio.play('coins', { vol: 0.9 });
     const what = m.type === 'passenger' ? (m.vip ? `${m.who} delivered safely` : `${m.pax} passenger${m.pax > 1 ? 's' : ''} dropped off`) : m.type === 'courier' ? `${m.qty} units of ${m.cargoName} delivered` : `${m.qty} ${COMM[m.commodity].name} supplied`;
-    this.ui.toast(`✓ Contract complete: ${what} · +◈ ${fmt(m.reward)}${repBonus ? ` (${repBonus > 0 ? '+' : '−'}◈ ${fmt(Math.abs(repBonus))} reputation)` : ''}${m.deposit ? ` (+◈ ${fmt(m.deposit)} deposit back)` : ''}`, 'good', 5);
+    this.ui.toast(`✓ Contract complete: ${what} · +◈ ${fmt(m.reward)} · ${FACTIONS[cf].short} +${fGain}${m.deposit ? ` (+◈ ${fmt(m.deposit)} deposit back)` : ''}`, 'good', 5);
     return true;
   }
   // per-station contract reputation; toasts when a tier changes
@@ -898,7 +951,7 @@ export class Game {
         const err = this.angleTo(p, aim);
         // cruise only while far enough away to brake from cruise speed before arriving
         const brakeDist = ap.arrive + 300 + (p.stats.speed * 5.5) / 2.2 * 1.3;
-        p.cruise = d > brakeDist && !this.hostilesNear(1300) && err < 0.3;
+        p.cruise = d > brakeDist && (p.stats.noInterdict || !this.hostilesNear(1300)) && err < 0.3;
         let thr = clamp((d - ap.arrive) / 350, 0.12, 1);
         if (err > 0.8) thr = Math.min(thr, 0.45); // tighter turning circle while rounding obstacles
         p.throttle = thr;
@@ -916,7 +969,7 @@ export class Game {
       p.pitch = clamp(p.pitch - inp.sy * tr * 0.75 * dt, -1.15, 1.15);
       if (Math.abs(inp.sy) < 0.05) p.pitch = damp(p.pitch, 0, 0.35, dt);
       p.throttle = inp.throttle;
-      if (p.cruise && this.hostilesNear(1300)) { p.cruise = false; this.ui.toast('Cruise disrupted — hostiles nearby', 'warn', 2.5); }
+      if (p.cruise && !p.stats.noInterdict && this.hostilesNear(1300)) { p.cruise = false; this.ui.toast('Cruise disrupted — hostiles nearby', 'warn', 2.5); }
     }
     p.boost = inp.boost && !p.cruise && !this.warp;
     p.updateMotion(dt, this.warp ? null : this.world);
@@ -925,7 +978,7 @@ export class Game {
 
   setCruise(on) {
     const p = this.player;
-    if (on && this.hostilesNear(1300)) { this.ui.toast('Cannot engage cruise — hostiles nearby', 'warn', 2); return; }
+    if (on && !p.stats.noInterdict && this.hostilesNear(1300)) { this.ui.toast('Cannot engage cruise — hostiles nearby', 'warn', 2); return; }
     p.cruise = on;
     if (on) { this.input.throttle = Math.max(this.input.throttle, 0.5); this.audio.play('warp', { vol: 0.35, rate: 1.3 }); }
   }
