@@ -14,6 +14,7 @@ import { Post } from './post.js';
 import { Audio } from './audio.js';
 import { UI } from './ui.js';
 import { GamepadInput } from './gamepad.js';
+import * as OM from './outpostModels.js';
 import { SectorEvents, normalizeEventState } from './events.js';
 import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
 import { RNG, clamp, damp, fmt } from './rng.js';
@@ -99,6 +100,19 @@ export class Game {
     window.__game = this;
   }
 
+  // debug: ?gallery=1 lays out every outpost piece in a row near the player, plus a full outpost
+  showGallery() {
+    const base = this.events.openSpacePos(4321);
+    const pieces = [['hub', OM.buildHub()], ...Object.entries(OM.MODULE_BUILDERS).map(([k, f]) => [k, f()]), ['scaffold', OM.buildScaffold()]];
+    this.gallery = pieces.map(([k, m], i) => { m.group.position.copy(base).add(new THREE.Vector3(i * 90, 0, 0)); this.scene.add(m.group); return { k, pos: m.group.position.clone() }; });
+    const full = OM.buildOutpost(['mine', 'refinery', 'solar', 'turret', 'storage', 'hab']);
+    full.group.position.copy(base).add(new THREE.Vector3(0, 0, 400)); this.scene.add(full.group);
+    this.gallery.push({ k: 'outpost', pos: full.group.position.clone() });
+    const full2 = OM.buildOutpost(['siphon', 'dock', 'scaffold', 'turret', '', 'solar']);
+    full2.group.position.copy(base).add(new THREE.Vector3(400, 0, 400)); this.scene.add(full2.group);
+    this.gallery.push({ k: 'outpost2', pos: full2.group.position.clone() });
+  }
+
   // visual comparison helper: post FX + atmospheric layers on/off
   setFX(on) {
     this.post.setEnabled(on);
@@ -143,6 +157,7 @@ export class Game {
     this.ui.enterPlay();
     this.checkDeadlines();
     this.events.briefing();
+    if (params.get('gallery')) this.showGallery();
     if (params.get('event')) setTimeout(() => this.events.force(params.get('event')), 300);
     if (!this.state.tutorial.docked) setTimeout(() => this.ui.toast('Welcome, pilot. Mine rocks in the field or dock at the station to trade.', 'info', 6), 600);
   }

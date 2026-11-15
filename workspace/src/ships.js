@@ -446,3 +446,6 @@ export function buildMissile() {
   sp.position.z = -1.6; sp.scale.setScalar(5); g.add(sp);
   return g;
 }
+
+// shared geometry kit for other model files (outposts)
+export const KIT = { mats, lathe, planform, rbox, add, mirror, M };
