@@ -403,6 +403,7 @@ body.gamepad:has(.overlay:not(.hidden)) #hud [data-pad]::after { display: none; 
 #comm.chatter .comm-text { font-size: 12px; font-style: italic; }
 @keyframes commin { from { transform: translate(-50%, -12px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
 #dialogBox.originBox { width: min(720px, 96vw); gap: 8px; }
+#dialogBox:has(.arc-head) { width: min(560px, 94vw); }
 #dialogBox.originBox > p { margin: 0; font: 600 12.5px/1.35 var(--font); }
 .origin { display: flex; gap: 10px; border: 2px solid var(--ink); background: #f7f0e0; box-shadow: 3px 3px 0 var(--ink); padding: 8px 10px; }
 .origin-pic svg { display: block; border: 2px solid var(--ink); }
@@ -419,3 +420,8 @@ body.gamepad:has(.overlay:not(.hidden)) #hud [data-pad]::after { display: none; 
 .origin-pic img { display: block; width: 84px; height: 84px; object-fit: cover; border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); }
 .intro-pic { align-self: center; width: 132px; height: 132px; object-fit: cover; border: 3px solid var(--warm); box-shadow: 4px 4px 0 #000; opacity: 0; animation: introLine 1.2s ease-out forwards; }
 #comm .comm-pic img.portrait { display: block; width: 64px; height: 64px; object-fit: cover; border: 2px solid var(--ink); }
+.arc-head { display: flex; gap: 12px; align-items: center; }
+.arc-head img { width: 72px; height: 72px; object-fit: cover; border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); flex: none; }
+.arc-head small { font: 900 10.5px var(--font); letter-spacing: 1px; opacity: .65; }
+.card.story { border-color: #6b4fa0; background: #f3ecfa; }
+body:has(#dialog:not(.hidden)) #comm { display: none; }

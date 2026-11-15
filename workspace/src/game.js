@@ -23,6 +23,7 @@ import { ExploreManager, normalizeExploreState } from './explore.js';
 import { normalizeCraftState } from './craft.js';
 import { Story, normalizeStoryState, lockAll, applyOrigin, isAccordEco } from './story.js';
 import { AccordManager, ACCORD_RAID, FRINGE_RAID } from './accord.js';
+import { ArcManager, raidMult } from './arcs.js';
 import { SectorEvents, normalizeEventState } from './events.js';
 import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
 import { RNG, clamp, damp, fmt } from './rng.js';
@@ -68,6 +69,7 @@ export class Game {
     this.explore = new ExploreManager(this);
     this.story = new Story(this);
     this.accord = new AccordManager(this);
+    this.arcs = new ArcManager(this);
     window.addEventListener('resize', () => this.resize());
     this.resize();
 
@@ -257,6 +259,7 @@ export class Game {
     this.fleet.spawnAll();
     this.explore.onEnterSystem();
     this.accord.onEnterSystem();
+    this.arcs.onEnterSystem(initial);
     if (!initial) this.ui.toast(`${sys.name} · ${ECONOMIES[sys.eco].name} system`, 'info', 3.5);
     this.ui.onSystemChanged();
   }
@@ -325,7 +328,7 @@ export class Game {
       const force = params.get('outlaws') === '1';
       // VIPs and hot cargo aboard draw extra outlaw attention; Red Wake standing and a Ghost Transponder change how often they come
       const rw = factionTier(standingWith(this.state, 'pirate')).raid * (this.player && this.player.stats.ghost ? 0.5 : 1);
-      const danger = (this.sysInfo.danger + Math.max(0, ...this.missionsAboard().map(missionDanger))) * rw * (isAccordEco(this.sysInfo.eco) ? ACCORD_RAID : FRINGE_RAID);
+      const danger = (this.sysInfo.danger + Math.max(0, ...this.missionsAboard().map(missionDanger))) * rw * (isAccordEco(this.sysInfo.eco) ? ACCORD_RAID : FRINGE_RAID) * raidMult(this.state, this.sysInfo.eco);
       let hit = force || Math.random() < danger, enforcer = null;
       // hostile lawful faction: their enforcers may come for you in their own space
       const own = this.sysInfo.eco, ot = factionTier(standingWith(this.state, own));
@@ -639,6 +642,7 @@ export class Game {
     this.fleet.despawnAll();
     this.save();
     this.ui.openStation();
+    setTimeout(() => { if (this.docked) this.arcs.onDock(); }, 450);
   }
   undock() {
     this.docked = false;

@@ -249,7 +249,7 @@ export class GamepadInput {
   // the dialog's "leave" button: exact labels only, so buttons like "CANCEL (½ refund)" are never pressed by B
   backButton(list) {
     const label = (b) => b.textContent.trim().toUpperCase();
-    return list.find((b) => /^(CLOSE|BACK)$/.test(label(b))) || list.find((b) => /^(CANCEL|NOT HERE|CONTINUE)$/.test(label(b)));
+    return list.find((b) => /^(CLOSE|BACK)$/.test(label(b))) || list.find((b) => /^(CANCEL|NOT HERE|NOT YET|CONTINUE)$/.test(label(b)));
   }
   // where focus starts in each menu: never on a destructive or leave-the-screen button
   defaultFocus(ctx, root, list) {

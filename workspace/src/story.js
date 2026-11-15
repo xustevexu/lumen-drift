@@ -5,6 +5,7 @@ import { COMM } from './data.js';
 import { pilotRank } from './economy.js';
 import { FACTIONS } from './factions.js';
 import { jumpsFrom } from './missions.js';
+import { normalizeArc } from './arcs.js';
 
 const INK = '#141826';
 export const ACCORD = new Set(['agricultural', 'industrial', 'hightech']);
@@ -116,6 +117,7 @@ export function applyOrigin(state, galaxy, id) {
     state.explore.probes = 2; state.explore.lore = 1; state.unlocks.exploration = true;
     state.credits = 2000;
   }
+  normalizeArc(state);
 }
 
 // ---------------------------------------------------------------- state
@@ -127,7 +129,7 @@ export function normalizeStoryState(state) {
   if (!state.unlocks || typeof state.unlocks !== 'object') state.unlocks = Object.fromEntries(UNLOCK_KEYS.map((k) => [k, true]));
   for (const k of UNLOCK_KEYS) if (typeof state.unlocks[k] !== 'boolean') state.unlocks[k] = true;
   if (!state.accord || typeof state.accord !== 'object') state.accord = { licensed: false, lastScanDay: -9 };
-  return state;
+  return normalizeArc(state);
 }
 export function lockAll(state) { state.unlocks = Object.fromEntries(UNLOCK_KEYS.map((k) => [k, false])); }
 export const unlocked = (state, k) => !state.unlocks || state.unlocks[k] !== false;
@@ -228,6 +230,7 @@ export class Story {
     if (!U.fleet && rank >= 2) open('fleet', 'wick', "Your rank opens doors: pilots will fly as your wingmen, and spare ships can run trade routes on their own. Both live in the Shipyard tab.");
     if (!U.sieges && U.factions && s.day >= 8) open('sieges', isAccordEco(eco) ? 'hale' : 'kask', isAccordEco(eco) ? 'Patrol intelligence: the Red Wake is massing armadas. When one is announced, stations hire militia. Independent pilots who help will be remembered.' : "Word from the deep mines: the Wake's been gathering big. When they hit a station they come in waves. Hire militia if you can, and bring friends.");
     this.updateDebt();
+    this.g.arcs.update();
   }
 
   // ---- the Debtor's marker ----

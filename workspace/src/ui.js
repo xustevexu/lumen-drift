@@ -685,7 +685,7 @@ export class UI {
     if (s.accord.licensed) return `<div class="card news"><div><h3>🛡 Accord Pilot License</h3><p><b>Licensed.</b> No docking tariffs or routine cargo scans in Accord space${here ? ', and the Patrol here flies for you too' : ''}.</p></div></div>`;
     if (!unlocked(s, 'factions') && !here) return '';
     const n = licenseNeeds(s), ok = n.ok && here;
-    const why = !here ? 'APPLY AT AN ACCORD STATION' : n.friendly < n.need ? `NEEDS FRIENDLY WITH ${n.need} ACCORD FACTIONS (${n.friendly}/${n.need})` : s.credits < LICENSE_PRICE ? `◈ ${fmt(LICENSE_PRICE)}` : '';
+    const why = n.barred ? 'THE ACCORD WILL NEVER LICENSE YOU' : !here ? 'APPLY AT AN ACCORD STATION' : n.friendly < n.need ? `NEEDS FRIENDLY WITH ${n.need} ACCORD FACTIONS (${n.friendly}/${n.need})` : s.credits < LICENSE_PRICE ? `◈ ${fmt(LICENSE_PRICE)}` : '';
     return `<div class="card news"><div><h3>🛡 Accord Pilot License</h3><p>${here ? 'This is Accord space: patrolled, safer, and taxed. Unlicensed pilots pay a docking tariff (4% of cargo, min ◈50) and face cargo scans; hot cargo counts as contraband.' : 'The Accord core (Agricultural, Industrial and High-Tech systems) is patrolled and safer, but taxes unlicensed pilots.'} A license ends the tariff and the scans.</p>
       <p>Requires ◈${fmt(LICENSE_PRICE)} and <b>Friendly</b> standing with ${n.need === 3 ? 'all three' : 'two of the three'} Accord factions (Institute, Combine, Cooperative)${n.deserter ? '. The Patrol has a long memory: deserters need all three.' : '.'}</p>
       <p><button class="sbtn buy" data-act="license" ${ok ? '' : 'disabled'}>${why || `BUY LICENSE · ◈ ${fmt(LICENSE_PRICE)}`}</button></p></div></div>`;
@@ -742,6 +742,7 @@ export class UI {
       <div class="card"><div><h3>Hull Repair</h3><p>${missing > 0 ? `${missing} damage to patch` : 'Hull is pristine'}</p></div><button class="sbtn buy" data-act="repair" ${missing > 0 && s.credits >= repair ? '' : 'disabled'}>◈ ${fmt(repair)}</button></div>
       <div class="card"><div><h3>Refuel</h3><p>${Math.floor(p.fuel)}/${p.stats.fuel} in the tank · ◈${g.fuelPrice()} a unit here (fuel is cheapest in Mining systems)</p></div><button class="sbtn buy" data-act="refuel" ${p.fuel < p.stats.fuel && s.credits >= g.fuelPrice() ? '' : 'disabled'}>◈ ${fmt(Math.ceil(p.stats.fuel - p.fuel) * g.fuelPrice())}</button></div>
       <div class="card"><div><h3>Missile Restock</h3><p>${p.stats.mslCap ? `${p.missiles}/${p.stats.mslCap} loaded · ◈60 each` : 'No missile rack installed'}</p></div><button class="sbtn buy" data-act="missiles" ${mslNeed > 0 && s.credits >= mslCost ? '' : 'disabled'}>◈ ${fmt(mslCost)}</button></div>
+      ${g.arcs.cardHTML()}
       ${g.story.debtHTML()}
       ${this.accordHTML()}
       ${this.siegeHTML()}
@@ -750,7 +751,7 @@ export class UI {
       ${U('outposts') ? this.outpostsHTML() : ''}
       ${U('factions') ? this.factionsHTML() : ''}
       <div class="card"><div><h3>Rest Until Tomorrow</h3><p>Skip to Day ${s.day + 1}. Prices recover, rocks and deposits regrow, new events may appear.${restNote}</p></div><button class="sbtn" data-act="rest">REST</button></div>
-      <div class="card"><div><h3>Pilot Record</h3><p>Rank <b>${RANK_NAMES[r]}</b> · Net worth ◈ ${fmt(netWorth(s))}<br>Mined ${s.stats.mined} · Trades ${s.stats.trades} · Contracts ${s.stats.contracts} · Outlaws downed ${s.stats.kills} · Jumps ${s.stats.jumps}</p></div></div>
+      <div class="card"><div><h3>Pilot Record</h3><p>${s.story.title ? `<b>${s.story.title}</b> · ` : ''}Rank <b>${RANK_NAMES[r]}</b> · Net worth ◈ ${fmt(netWorth(s))}<br>Mined ${s.stats.mined} · Trades ${s.stats.trades} · Contracts ${s.stats.contracts} · Outlaws downed ${s.stats.kills} · Jumps ${s.stats.jumps}</p></div></div>
       <p style="font:600 12px var(--font);opacity:.75">Outlaw raids grow from lone raiders to packs of 2–4 as your rank rises. Barriers and beams are your best insurance.</p>
     </div>`;
   }
@@ -809,6 +810,7 @@ export class UI {
     } else if (act === 'refuel') { g.refuel(false);
     } else if (act === 'paydebt') {
       const n = g.story.payDebt(Number(arg)); if (n) { g.audio.play('coins', { vol: 0.7 }); this.toast(`Paid Vex ◈${fmt(n)}`, 'good', 2.5); g.save(); }
+    } else if (act === 'arccourse') { g.arcs.courseTo(); return;
     } else if (act === 'license') {
       if (g.accord.buyLicense()) { g.audio.play('coins', { vol: 0.8 }); this.toast('✓ Accord Pilot License granted', 'good', 4); }
     } else if (act === 'probe') {
@@ -1150,7 +1152,7 @@ export class UI {
       const sel = this.mapSel && this.mapSel.sys === s.id;
       if (sel) { ctx.strokeStyle = '#f0703c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 22, 0, Math.PI * 2); ctx.stroke(); }
       const br = s.id === cur ? 20 : sel ? 23 : 12;
-      labels.push({ x, y, gap: br + 2, lines: [s.name, `${isAccordEco(s.eco) ? '🛡 ' : ''}${ECONOMIES[s.eco].name}${known ? '' : ' · ?'}`], short: [s.name], font: '900 13px "Arial Black", system-ui', font2: '700 10px system-ui', lh: 15,
+      labels.push({ x, y, gap: br + 2, lines: [`${g.state.story.arc && g.state.story.arc.target === s.id ? '📖 ' : ''}${s.name}`, `${isAccordEco(s.eco) ? '🛡 ' : ''}${ECONOMIES[s.eco].name}${known ? '' : ' · ?'}`], short: [s.name], font: '900 13px "Arial Black", system-ui', font2: '700 10px system-ui', lh: 15,
         color: sel ? '#f0703c' : '#efe6d2', color2: known ? 'rgba(239,230,210,.85)' : 'rgba(239,230,210,.5)', pri: sel ? 99 : s.id === cur ? 50 : 10, force: sel || s.id === cur,
         blocks: [{ x: x - br, y: y - br, w: br * 2, h: br * 2 }] });
     }

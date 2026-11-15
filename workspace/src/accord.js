@@ -10,6 +10,7 @@ import { pilotRank } from './economy.js';
 import { factionTier, standingWith, FACTIONS } from './factions.js';
 import { isAccordEco, ACCORD } from './story.js';
 import { fmt } from './rng.js';
+import { arcEnding } from './arcs.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
@@ -22,7 +23,8 @@ export function licenseNeeds(state) {
   const deserter = state.story && state.story.origin === 'deserter';
   const friendly = [...ACCORD].filter((f) => standingWith(state, f) >= 10).length;
   const need = deserter ? 3 : 2;
-  return { need, friendly, deserter, ok: friendly >= need && state.credits >= LICENSE_PRICE };
+  const barred = arcEnding(state) === 'fringe';
+  return { need, friendly, deserter, barred, ok: !barred && friendly >= need && state.credits >= LICENSE_PRICE };
 }
 
 export class AccordManager {
@@ -34,7 +36,7 @@ export class AccordManager {
   onEnterSystem() {
     this.despawn();
     const g = this.g, s = this.state;
-    if (!this.accordHere) return;
+    if (!this.accordHere && !(arcEnding(s) === 'open' && g.sysInfo.eco === 'frontier')) return;
     const SA = s.siege.active; if (SA && SA.phase === 'live' && SA.target.sys === s.systemId) return; // militia own the sky today
     const rank = pilotRank(s), n = 2, home = g.world.station.pos;
     for (let i = 0; i < n; i++) {
@@ -114,7 +116,8 @@ export class AccordManager {
     if (!this.accordHere || s.accord.licensed) return;
     const cargo = g.player.cargo; let v = 0;
     for (const k in cargo) v += (cargo[k] || 0) * COMM[k].base;
-    const fee = Math.max(TARIFF_MIN, Math.round(v * TARIFF_RATE / 10) * 10);
+    const half = arcEnding(s) === 'open' ? 0.5 : 1;
+    const fee = Math.round(Math.max(TARIFF_MIN, Math.round(v * TARIFF_RATE / 10) * 10) * half);
     s.credits -= Math.min(s.credits, fee);
     g.ui.toast(`Accord docking tariff: ◈${fmt(fee)} (unlicensed pilot${v ? `, ${Math.round(TARIFF_RATE * 100)}% of declared cargo` : ''})`, 'info', 4);
     if (!s.story.said['tariff']) { s.story.said['tariff'] = 1; setTimeout(() => g.story.comm('wick', "That's the Accord tariff: every unlicensed pilot pays it on docking. An Accord Pilot License ends it, and the cargo scans too. Details in Services.", {}), 1500); }
