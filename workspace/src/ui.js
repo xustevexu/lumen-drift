@@ -601,7 +601,7 @@ export class UI {
       const u = UNIQUES[id];
       h += `<div class="card active"><h3>${u.name}<span class="cls">INSTALLED</span></h3><p>${u.desc}</p><button class="pbtn secondary" style="font-size:13px;padding:8px" data-act="rmunique" data-arg="${id}">REMOVE · refund ◈ ${fmt(Math.round(this.uniquePrice(id, rec.hull) / 2))}</button></div>`;
     }
-    if (s.explore.heart && !s.ships.some((x) => x.uniques.includes('heart'))) {
+    if (s.explore.heart && !s.explore.heartGiven && !s.ships.some((x) => x.uniques.includes('heart'))) {
       h += `<div class="card"><h3>Lumen Heart<span class="cls" style="color:#c8f56a">ARTIFACT</span></h3><p>${UNIQUES.heart.desc}</p><button class="pbtn ${used < slots ? 'primary' : 'secondary'}" style="font-size:13px;padding:8px" data-act="heart" ${used < slots ? '' : 'disabled'}>${used < slots ? 'INSTALL (FREE)' : 'NO FREE SLOT'}</button></div>`;
     }
     for (const u of offers) {
@@ -849,7 +849,7 @@ export class UI {
       }
     } else if (act === 'heart') {
       const rec = g.activeShipRec();
-      if (s.explore.heart && rec.uniques.length < uniqueSlots(rec.hull) && !s.ships.some((x) => x.uniques.includes('heart'))) { rec.uniques.push('heart'); g.refreshPlayerStats(); g.audio.play('warp', { vol: 0.6 }); this.toast('The Lumen Heart hums to life in your ship', 'good', 4); }
+      if (s.explore.heart && !s.explore.heartGiven && rec.uniques.length < uniqueSlots(rec.hull) && !s.ships.some((x) => x.uniques.includes('heart'))) { rec.uniques.push('heart'); g.refreshPlayerStats(); g.audio.play('warp', { vol: 0.6 }); this.toast('The Lumen Heart hums to life in your ship', 'good', 4); }
     } else if (act === 'rmunique') {
       const rec = g.activeShipRec();
       if (rec.uniques.includes(arg)) { rec.uniques = rec.uniques.filter((x) => x !== arg); g.addCredits(Math.round(this.uniquePrice(arg, rec.hull) / 2)); g.refreshPlayerStats(); this.toast(`${UNIQUES[arg].name} removed`, 'info', 2.5); }

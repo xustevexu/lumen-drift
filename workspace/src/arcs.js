@@ -6,12 +6,14 @@ import { pilotRank } from './economy.js';
 import { jumpsFrom } from './missions.js';
 import { isAccordEco, ACCORD, portraitSVG } from './story.js';
 import { DebtorArc, DEBTOR_INFO, DEBTOR_ENDINGS } from './arcs_debtor.js';
+import { HeirArc, HEIR_INFO, HEIR_ENDINGS, heirFuelMult } from './arcs_heir.js';
 
 const _v = new THREE.Vector3();
 
 export const ARC_INFO = {
   deserter: { title: 'The Cipher Key', chapters: ['Old Colors', 'Static', 'Deniable', 'The Middle Man', 'The Hearing', 'Coming Home'] },
   debtor: DEBTOR_INFO,
+  heir: HEIR_INFO,
 };
 export const ENDINGS = {
   accord: { name: 'Reinstated', title: 'Commander (Reinstated)', line: 'You gave the evidence to Hale. Mercer was arrested, you were pardoned and given an Accord Pilot License, and the Accord treats you with respect.' },
@@ -19,6 +21,7 @@ export const ENDINGS = {
   open: { name: 'The Whistleblower', title: 'The Whistleblower', line: 'You broadcast everything. The Accord was forced to reform: tariffs halved, Patrols now fly the frontier too, and the Red Wake lost its friends in high places.' },
   bought: { name: 'Paid Off', title: 'Mercenary', line: "You took Mercer's money and burned the evidence. You're rich. Nobody on either side quite trusts you any more." },
   ...DEBTOR_ENDINGS,
+  ...HEIR_ENDINGS,
 };
 
 export function normalizeArc(state) {
@@ -28,8 +31,10 @@ export function normalizeArc(state) {
 }
 // permanent effects of an ending, used across the game
 export function arcEnding(state) { return state.story && state.story.arc && state.story.arc.ending; }
-export function raidMult(state, eco) {
+export function fuelMult(state, eco) { return heirFuelMult(arcEnding(state), eco); }
+export function raidMult(state, eco, galaxy) {
   const e = arcEnding(state);
+  if (e === 'rest' && galaxy && state.systemId === galaxy.hiddenId) return 0;
   if (e === 'open') return 0.85;
   if (e === 'fringe' && !isAccordEco(eco)) return 0.8;
   if (e === 'partner' || e === 'enforcer') return 0.85;
@@ -37,7 +42,7 @@ export function raidMult(state, eco) {
 }
 
 export class ArcManager {
-  constructor(game) { this.g = game; this.debtor = new DebtorArc(this); }
+  constructor(game) { this.g = game; this.debtor = new DebtorArc(this); this.heir = new HeirArc(this); }
   pic(id) { return portraitSVG(id, 72); }
   newDay() { const a = this.arc; if (a && this.origin === 'debtor') this.debtor.newDay(); }
   get state() { return this.g.state; }
@@ -57,6 +62,7 @@ export class ArcManager {
   update() {
     const a = this.arc; if (!a || a.done) return;
     if (this.origin === 'debtor') { this.debtor.update(); return; }
+    if (this.origin === 'heir') { this.heir.update(); return; }
     if (this.origin !== 'deserter') return;
     const g = this.g, s = this.state;
     if (a.stage === 'wait') {
@@ -101,11 +107,12 @@ export class ArcManager {
   onEnterSystem(initial) {
     const a = this.arc; if (!a || a.done) return;
     if (this.origin === 'debtor') { this.debtor.onEnterSystem(initial); return; }
+    if (this.origin === 'heir') { this.heir.onEnterSystem(initial); return; }
     if (this.origin !== 'deserter') return;
     if (a.ch === 3 && a.stage === 'go') { a.flags.spawned = false; if (!initial && a.flags.armed) setTimeout(() => this.spawnSquad({ n: 3, name: 'Unmarked', tough: 1.15, color: 0x6f9fff, toast: '⚠ Three unmarked ships dropped out of warp. They are here for you.', speaker: 'wick', line: 'No transponders, but those are Accord-pattern drives. Patrol hardware flying as pirates. Take them down and we can pull their logs.' }), 2500); }
   }
   spawnSquad(o) {
-    const g = this.g, a = this.arc; if (!a || a.ch !== 3 || a.flags.spawned || g.docked) return;
+    const g = this.g, a = this.arc; if (!a || !a.flags.armed || a.flags.spawned || g.docked) return;
     a.flags.spawned = true;
     const p = g.player, dir = _v.set(Math.sin(p.yaw), 0, Math.cos(p.yaw)).multiplyScalar(1900);
     const rank = pilotRank(this.state);
@@ -123,6 +130,7 @@ export class ArcManager {
   onDock() {
     const a = this.arc; if (!a || a.done || a.stage !== 'go') return;
     if (this.origin === 'debtor') { this.debtor.onDock(); return; }
+    if (this.origin === 'heir') { this.heir.onDock(); return; }
     if (this.origin !== 'deserter') return;
     const g = this.g, s = this.state, sid = s.systemId, eco = g.sysInfo.eco, ui = g.ui;
     if (a.ch === 1 && sid === a.target) {
@@ -247,7 +255,8 @@ export class ArcManager {
     const a = this.arc, s = this.state; if (!a || !ARC_INFO[this.origin]) return '';
     const info = ARC_INFO[this.origin];
     if (a.done) return `<div class="card news story"><div><h3>📖 ${info.title} · Complete</h3><p>Ending: <b>${ENDINGS[a.ending].name}</b>. ${ENDINGS[a.ending].line}</p></div></div>`;
-    const goal = a.stage === 'go' && a.goal ? a.goal : 'The next chapter begins as you keep flying.';
+    const live = this.origin === 'heir' ? this.heir.goalText() : null;
+    const goal = live || (a.stage === 'go' && a.goal ? a.goal : 'The next chapter begins as you keep flying.');
     const btn = a.stage === 'go' && a.target != null && a.target !== s.systemId ? '<button class="sbtn" data-act="arccourse">SET COURSE</button>' : '';
     return `<div class="card news story"><div><h3>📖 ${info.title} · Chapter ${a.ch}: ${info.chapters[a.ch - 1]}</h3><p>${goal}</p>${btn}</div></div>`;
   }

@@ -23,7 +23,7 @@ import { ExploreManager, normalizeExploreState } from './explore.js';
 import { normalizeCraftState } from './craft.js';
 import { Story, normalizeStoryState, lockAll, applyOrigin, isAccordEco } from './story.js';
 import { AccordManager, ACCORD_RAID, FRINGE_RAID } from './accord.js';
-import { ArcManager, raidMult } from './arcs.js';
+import { ArcManager, raidMult, fuelMult } from './arcs.js';
 import { SectorEvents, normalizeEventState } from './events.js';
 import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
 import { RNG, clamp, damp, fmt } from './rng.js';
@@ -328,7 +328,7 @@ export class Game {
       const force = params.get('outlaws') === '1';
       // VIPs and hot cargo aboard draw extra outlaw attention; Red Wake standing and a Ghost Transponder change how often they come
       const rw = factionTier(standingWith(this.state, 'pirate')).raid * (this.player && this.player.stats.ghost ? 0.5 : 1);
-      const danger = (this.sysInfo.danger + Math.max(0, ...this.missionsAboard().map(missionDanger))) * rw * (isAccordEco(this.sysInfo.eco) ? ACCORD_RAID : FRINGE_RAID) * raidMult(this.state, this.sysInfo.eco);
+      const danger = (this.sysInfo.danger + Math.max(0, ...this.missionsAboard().map(missionDanger))) * rw * (isAccordEco(this.sysInfo.eco) ? ACCORD_RAID : FRINGE_RAID) * raidMult(this.state, this.sysInfo.eco, this.galaxy);
       let hit = force || Math.random() < danger, enforcer = null;
       // hostile lawful faction: their enforcers may come for you in their own space
       const own = this.sysInfo.eco, ot = factionTier(standingWith(this.state, own));
@@ -1083,7 +1083,7 @@ export class Game {
       p.throttle = Math.min(p.throttle, 0.5); p.boost = false;
     }
   }
-  fuelPrice() { return FUEL_PRICE[this.sysInfo.eco] || 5; }
+  fuelPrice() { return Math.max(1, Math.round((FUEL_PRICE[this.sysInfo.eco] || 5) * fuelMult(this.state, this.sysInfo.eco))); }
   refuel(auto = false) {
     const p = this.player, need = Math.ceil(p.stats.fuel - p.fuel); if (need <= 0) return 0;
     const price = this.fuelPrice(), afford = Math.min(need, Math.floor(this.state.credits / price));
