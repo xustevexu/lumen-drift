@@ -4,7 +4,7 @@ import { fmt, clamp } from './rng.js';
 import { pilotRank, netWorth, RANK_NAMES } from './economy.js';
 import { SLOT_COUNT, autoInfo, readSlot, writeSlot, summarize, exportText, exportName, parseImport, ago } from './save.js';
 import { liveEvents, describe, eventIcon, repTier, repSummary } from './events.js';
-import { MAX_ACTIVE, offersFor, missionSpace, boundToShip, typeTag, destText, needText, dueText } from './missions.js';
+import { MAX_ACTIVE, offersFor, missionSpace, boundToShip, typeTag, modTags, destText, needText, dueText, reqMet, reqText, standingOf, standingTier, nextStanding } from './missions.js';
 
 const $ = (id) => document.getElementById(id);
 const _p = new THREE.Vector3();
@@ -278,6 +278,7 @@ export class UI {
     for (const o of g.outlaws) if (!o.dead && !o.isBase && o.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${o.uid}`, pos: o.pos, cls: 'outlaw' + (o === g.target ? ' target' : ''), name: o.name, edge: true });
     for (let i = 0; i < g.fx.crates.length; i++) { const c = g.fx.crates[i]; if (c.pos.distanceTo(p.pos) < 900) list.push({ key: `c${i}`, pos: c.pos, cls: 'crate', name: c.credits ? '◈ bounty' : 'cargo' }); }
     if (g.autopilot) list.push({ key: 'ap', pos: g.autopilot.pos, cls: 'station', name: `AP: ${g.autopilot.name}`, edge: true });
+    for (const m of g.missionsAboard()) if (m.side && m.side.kind === 'detour' && !m.side.done && m.side.sys === g.state.systemId) list.push({ key: `side_${m.id}`, pos: g.landingPoint(m.side.planet), cls: 'mission', name: `SIDE REQUEST · ${m.side.name}`, edge: true });
     for (const t of this.missionTargets()) list.push({ key: `ms_${t.key}`, pos: t.pos, cls: 'mission', name: t.via ? `CONTRACT ROUTE${t.n > 1 ? ` ×${t.n}` : ''}` : `CONTRACT${t.n > 1 ? ` ×${t.n}` : ''} · ${t.name}`, edge: true });
     const seen = new Set();
     const box = $('markers');
@@ -585,7 +586,9 @@ export class UI {
   missionsHTML() {
     const g = this.g, s = g.state, p = g.player;
     const offers = offersFor(s, g.galaxy, s.systemId, pilotRank(s));
-    let h = `<div class="ms-head"><span>ACTIVE CONTRACTS ${s.missions.length}/${MAX_ACTIVE}</span><small>Free hold ${g.cargoFree()}/${p.stats.cargo}${repTier(s.rep).pay ? ` · ${repTier(s.rep).name}: pay ${repTier(s.rep).pay > 0 ? '+' : ''}${Math.round(repTier(s.rep).pay * 100)}%` : ''}</small></div>`;
+    const pts = standingOf(s, s.systemId), tier = standingTier(pts), nx = nextStanding(pts);
+    let h = `<div class="standing"><b>Standing at ${g.world.station.name}:</b> <span class="st-tier st-${tier.level}">${tier.name.toUpperCase()}</span> <small>(${pts} pts)</small>${tier.perks ? `<br><small>${tier.perks}</small>` : ''}${nx ? `<br><small style="opacity:.75">Next: ${nx.name} at ${nx.min} pts. Completing this station's contracts earns standing (special jobs count double); failing loses it.</small>` : ''}</div>`;
+    h += `<div class="ms-head"><span>ACTIVE CONTRACTS ${s.missions.length}/${MAX_ACTIVE}</span><small>Free hold ${g.cargoFree()}/${p.stats.cargo}${repTier(s.rep).pay ? ` · ${repTier(s.rep).name}: pay ${repTier(s.rep).pay > 0 ? '+' : ''}${Math.round(repTier(s.rep).pay * 100)}%` : ''}</small></div>`;
     h += s.missions.length ? `<div class="cards">${s.missions.map((m) => this.missionCard(m, true)).join('')}</div>` : '<p class="ms-empty">No active contracts — pick one from the board below.</p>';
     h += `<div class="ms-head" style="margin-top:14px"><span>CONTRACT BOARD · ${g.world.station.name.toUpperCase()}</span><small>New offers each day</small></div>`;
     h += offers.length ? `<div class="cards">${offers.map((o) => this.missionCard(o, false)).join('')}</div>` : '<p class="ms-empty">The board is empty. Check back tomorrow.</p>';
@@ -597,6 +600,7 @@ export class UI {
     if (s.missions.length >= MAX_ACTIVE) return 'CONTRACT LIMIT';
     if (missionSpace(m) > g.cargoFree()) return `NEEDS ${missionSpace(m)} FREE HOLD`;
     if (m.deposit > s.credits) return `NEEDS ◈ ${fmt(m.deposit)}`;
+    if (!reqMet(m, g.activeShipRec())) return m.req.hull ? `NEEDS ${m.req.hull === 'kestrel' ? 'KESTREL' : HULLS[m.req.hull].name.toUpperCase()}` : `NEEDS ${MODULES[m.req.mod].name.toUpperCase()} MK${m.req.lvl}`;
     return '';
   }
   missionCard(m, taken) {
@@ -604,7 +608,7 @@ export class UI {
     const late = taken && m.deadline <= s.day;
     let status = '', btns;
     if (taken) {
-      if (m.type === 'supply') status = `<br>In hold: <b>${g.player.cargo[m.commodity] || 0}/${m.qty}</b>`;
+      if (m.type === 'supply') status = `<br>In hold: <b>${g.player.cargo[m.commodity] || 0}/${m.qty}</b>${m.ore ? ` · ${COMM[m.ore].name} mined <b>${m.oreMined || 0}/${m.oreQty}</b>` : ''}`;
       else if (boundToShip(m)) status = `<br>Aboard: <b>${HULLS[g.activeShipRec().hull].name}</b>`;
       btns = `<button class="pbtn primary" data-act="mcourse" data-arg="${m.id}">SET COURSE</button><button class="pbtn secondary" data-act="abandon" data-arg="${m.id}">ABANDON</button>`;
     } else {
@@ -612,7 +616,7 @@ export class UI {
       btns = `<button class="pbtn ${why ? 'secondary' : 'primary'}" data-act="accept" data-arg="${m.id}" ${why ? 'disabled' : ''}>${why || 'ACCEPT'}</button>`;
     }
     return `<div class="card ms${taken ? ' taken' : ''}${late ? ' late' : ''}"><h3><span>${m.title}</span><span class="pay">◈ ${fmt(m.reward)}</span></h3>
-      <div><span class="mtag ${t.cls}">${t.label}</span> <small>${m.client}</small></div>
+      <div><span class="mtag ${t.cls}">${t.label}</span> ${modTags(m).map((x) => `<span class="mtag ${x.cls}">${x.label}</span>`).join(' ')} <small>${m.client}</small></div>
       <div class="meta">To <b>${destText(m, g.galaxy, s.systemId)}</b><br>${needText(m)}<br>${dueText(m, s.day)}${m.deposit ? `<br>Deposit ◈ ${fmt(m.deposit)} — refunded on delivery` : ''}${status}</div>
       <div class="btns">${btns}</div></div>`;
   }
@@ -973,7 +977,7 @@ export class UI {
       if (sel.kind === 'station') extra = '<p>Safe harbor: market, upgrades, shipyard, repairs.</p>';
       if (sel.kind === 'derelict') extra = '<p>Abandoned hulk. Hold SALVAGE nearby for credits & parts. Restocks every 3 days.</p>';
       if (sel.kind === 'field' && sel.field.surge) extra += '<p style="color:#4f7a10"><b>✦ Lumenite surge today:</b> far higher chance of Lumenite from every rock here.</p>';
-      if (sel.kind === 'event') { const d = describe(sel.ev, g.galaxy, g.state, g.player.stats.sensorLvl); extra = `<p>${d.line}</p>${sel.ev.type === 'distress' ? '<p>Fly alongside and hold ASSIST to patch the ship up.</p>' : '<p>Approach and the base launches its guards. Destroy the base itself for the loot.</p>'}`; }
+      if (sel.kind === 'event') { const d = describe(sel.ev, g.galaxy, g.state, g.player.stats.sensorLvl); extra = `<p>${d.line}</p>${sel.ev.type === 'distress' ? '<p>Fly alongside and hold ASSIST to patch the ship up.</p>' : sel.ev.type === 'wreck' ? '<p>Fly close and hold SALVAGE.</p>' : '<p>Approach and the base launches its guards. Destroy the base itself for the loot.</p>'}`; }
       const d = (sel.dest || sel.pos).distanceTo(g.player.pos);
       const here = g.state.missions.filter((m) => m.dest.sys === g.state.systemId && ((sel.kind === 'station' && m.dest.kind === 'station') || (sel.kind === 'planet' && m.dest.kind === 'planet' && g.world.deposits[m.dest.planet] === sel.deposit)));
       const ms = here.length ? `<p style="color:#9a6a00"><b>★ Contract drop-off:</b> ${here.map((m) => m.title).join('; ')}</p>` : '';

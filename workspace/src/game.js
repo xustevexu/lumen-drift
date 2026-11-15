@@ -6,7 +6,7 @@ import { World } from './world.js';
 import { Ship, FX } from './entities.js';
 import { Economy, newState, pilotRank, netWorth } from './economy.js';
 import { readAuto, writeAuto, clearAuto, requestPersistence } from './save.js';
-import { MAX_ACTIVE, normalizeMissionState, missionSpace, missionLure, boundToShip, markTaken, routePath } from './missions.js';
+import { MAX_ACTIVE, normalizeMissionState, missionSpace, missionLure, boundToShip, markTaken, routePath, missionDanger, reqMet, reqText, standingGain, standingOf, standingTier } from './missions.js';
 import { HULLS, COMM, COMMODITIES, ECONOMIES, computeStats, DAY_LENGTH, TRADER_NAMES, OUTLAW_NAMES } from './data.js';
 import { makeGlbTemplate, buildShipTemplate } from './ships.js';
 import { globalUniforms } from './shaders.js';
@@ -279,8 +279,8 @@ export class Game {
     let roll = this.state.outlawRoll[key];
     if (!roll) {
       const force = params.get('outlaws') === '1';
-      // VIPs aboard draw extra outlaw attention
-      const danger = this.sysInfo.danger + (this.missionsAboard().some((m) => m.vip) ? 0.12 : 0);
+      // VIPs and hot cargo aboard draw extra outlaw attention
+      const danger = this.sysInfo.danger + Math.max(0, ...this.missionsAboard().map(missionDanger));
       const hit = force || Math.random() < danger;
       roll = { hit, at: hit ? Math.min(0.95, this.state.dayTime + (force ? 0.02 : 0.08 + Math.random() * 0.5)) : null, spawned: false, warned: false };
       // keep save small: only keep current rolls
@@ -620,6 +620,8 @@ export class Game {
     // contract drop-off in low orbit above a planet colony
     const drops = this.missionsAboard().filter((m) => m.dest.kind === 'planet' && m.dest.sys === this.state.systemId && this.landingPoint(m.dest.planet).distanceTo(p.pos) < 250);
     if (drops.length) return { type: 'dropoff', label: drops.some((m) => m.type === 'passenger') ? 'DROP OFF' : 'DELIVER', missions: drops, warm: true };
+    const side = this.missionsAboard().find((m) => m.side && m.side.kind === 'detour' && !m.side.done && m.side.sys === this.state.systemId && this.landingPoint(m.side.planet).distanceTo(p.pos) < 250);
+    if (side) return { type: 'sidedrop', label: 'DROP OFF 1 PASSENGER', mission: side, warm: true };
     for (const t of this.traders) if (!t.dead && t.pos.distanceTo(p.pos) < 110 + t.radius && this.time - t.lastHit > 10) return { type: 'hail', label: `HAIL ${t.name}`, trader: t };
     for (const d of W.derelicts) {
       if (d.pos.distanceTo(p.pos) < 150 && !d.occupied) {
@@ -638,6 +640,12 @@ export class Game {
     else if (act.type === 'jump') this.beginJump(act.gate);
     else if (act.type === 'hail') this.ui.openTraderDialog(act.trader);
     else if (act.type === 'dropoff') { for (const m of act.missions) this.completeMission(m); this.save(); }
+    else if (act.type === 'sidedrop') {
+      const m = act.mission; m.side.done = true; m.pax = Math.max(1, m.pax - 1);
+      this.addCredits(m.side.reward); this.updateMissionLoad(); this.audio.play('coins', { vol: 0.7 });
+      this.ui.toast(`Passenger dropped at ${m.side.name}: "Much obliged!" +◈ ${fmt(m.side.reward)} · 2 hold space freed`, 'good', 4);
+      this.save();
+    }
   }
 
   // ------------------------------------------------------------- contracts
@@ -660,8 +668,11 @@ export class Game {
     const need = missionSpace(offer);
     if (need > this.cargoFree()) return `Needs ${need} free hold space (you have ${this.cargoFree()})`;
     if (offer.deposit > s.credits) return `Needs a ◈ ${fmt(offer.deposit)} deposit`;
+    if (!reqMet(offer, this.activeShipRec())) return `${offer.who} will only travel in ${reqText(offer.req)}`;
     s.credits -= offer.deposit;
-    s.missions.push({ ...offer, accepted: s.day, shipUid: s.active });
+    const m = { ...offer, accepted: s.day, shipUid: s.active, side: offer.side ? { ...offer.side } : undefined };
+    s.missions.push(m);
+    if (m.side && m.side.kind === 'wreck') { m.side.revealed = true; this.events.addTip(m); }
     markTaken(s, offer);
     this.updateMissionLoad();
     this.audio.play('click', { vol: 0.6 });
@@ -673,20 +684,34 @@ export class Game {
     if (m.type === 'supply') {
       const have = this.player.cargo[m.commodity] || 0;
       if (have < m.qty) return false;
+      if (m.ore && ((m.oreMined || 0) < m.oreQty || (this.player.cargo[m.ore] || 0) < m.oreQty)) return false;
       this.player.cargo[m.commodity] = have - m.qty; if (!this.player.cargo[m.commodity]) delete this.player.cargo[m.commodity];
+      if (m.ore) { this.player.cargo[m.ore] -= m.oreQty; if (!this.player.cargo[m.ore]) delete this.player.cargo[m.ore]; }
     }
     s.missions = s.missions.filter((x) => x !== m);
     const repBonus = Math.round(m.reward * repTier(s.rep).pay);
     this.addCredits(m.reward + repBonus + m.deposit);
     s.stats.contracts++;
+    this.changeStanding(m.from.sys, standingGain(m));
     this.updateMissionLoad();
     this.audio.play('coins', { vol: 0.9 });
     const what = m.type === 'passenger' ? (m.vip ? `${m.who} delivered safely` : `${m.pax} passenger${m.pax > 1 ? 's' : ''} dropped off`) : m.type === 'courier' ? `${m.qty} units of ${m.cargoName} delivered` : `${m.qty} ${COMM[m.commodity].name} supplied`;
     this.ui.toast(`✓ Contract complete: ${what} · +◈ ${fmt(m.reward)}${repBonus ? ` (${repBonus > 0 ? '+' : '−'}◈ ${fmt(Math.abs(repBonus))} reputation)` : ''}${m.deposit ? ` (+◈ ${fmt(m.deposit)} deposit back)` : ''}`, 'good', 5);
     return true;
   }
+  // per-station contract reputation; toasts when a tier changes
+  changeStanding(sysId, n) {
+    const s = this.state, before = standingTier(standingOf(s, sysId));
+    s.standing[sysId] = standingOf(s, sysId) + n;
+    const after = standingTier(s.standing[sysId]);
+    if (after.name !== before.name) {
+      const st = this.galaxy.systems[sysId];
+      setTimeout(() => this.ui.toast(`${n > 0 ? '▲' : '▼'} ${st.station} Station now rates you: ${after.name.toUpperCase()}${after.perks ? ` · ${after.perks}` : ''}`, n > 0 ? 'good' : 'warn', 6), 900);
+    }
+  }
   failMission(m, reason) {
     this.state.missions = this.state.missions.filter((x) => x !== m);
+    if (m.from) this.changeStanding(m.from.sys, reason === 'abandoned' ? -1 : -2);
     this.updateMissionLoad();
     this.ui.toast(`✗ Contract failed: ${m.title} — ${reason}${m.deposit ? ` · deposit ◈ ${fmt(m.deposit)} forfeited` : ''}`, 'warn', 6);
   }
@@ -696,7 +721,7 @@ export class Game {
       if (m.dest.sys !== sid || m.dest.kind !== 'station') continue;
       if (m.type === 'supply') {
         const have = this.player.cargo[m.commodity] || 0;
-        if (!this.completeMission(m)) this.ui.toast(`Supply contract: bring ${m.qty} ${COMM[m.commodity].name} here (you have ${have})`, 'info', 5);
+        if (!this.completeMission(m)) this.ui.toast(`Supply contract: bring ${m.qty} ${COMM[m.commodity].name} here (you have ${have})${m.ore ? ` plus ${m.oreQty} ${COMM[m.ore].name} you mined yourself (mined ${m.oreMined || 0}, in hold ${this.player.cargo[m.ore] || 0})` : ''}`, 'info', 6);
       } else if (m.shipUid === this.state.active) this.completeMission(m);
     }
   }
@@ -751,6 +776,7 @@ export class Game {
       const rareChance = p.stats.rare + (node.kind === 'deposit' ? 0.05 : node.field ? node.field.data.lumenite * (p.stats.rare > 0 ? 1 : 0.3) : 0) + this.events.surgeBonus(node.field);
       if (Math.random() < rareChance) { ore = 'lumenite'; this.ui.toast('✦ Lumenite crystal extracted!', 'good', 2); }
       p.cargo[ore] = (p.cargo[ore] || 0) + 1;
+      for (const m of this.state.missions) if (m.ore === ore && (m.oreMined || 0) < m.oreQty) { m.oreMined = (m.oreMined || 0) + 1; if (m.oreMined === m.oreQty) this.ui.toast(`✓ Mined all ${m.oreQty} ${COMM[ore].name} for the ${m.dest.name} supply contract`, 'good', 3.5); }
       node.amount -= 1; this.state.stats.mined++;
       this.ui.cargoTick(ore);
       if (node.kind === 'rock') this.world.depleteRock(node);

@@ -10,7 +10,7 @@ import { RNG, fmt } from './rng.js';
 import { COMM, MODULES, MODULE_ORDER, TRADER_NAMES, OUTLAW_NAMES, computeStats } from './data.js';
 import { systemData } from './missions.js';
 import { Ship } from './entities.js';
-import { buildPirateBaseTemplate } from './ships.js';
+import { buildPirateBaseTemplate, buildDerelict } from './ships.js';
 import { pilotRank } from './economy.js';
 import { softTexture } from './shaders.js';
 
@@ -100,6 +100,7 @@ export function eventIcon(e) {
   if (e.type === 'distress') return { ch: '⚠', col: '#f0703c' };
   if (e.type === 'vein') return { ch: '✦', col: '#c8f56a' };
   if (e.type === 'base') return { ch: '☠', col: '#ff4a3a' };
+  if (e.type === 'wreck') return { ch: '✧', col: '#ffd34a' };
   return { ch: e.icon, col: e.icon === '▼' ? '#ff6b4a' : '#7bc86c' };
 }
 export function signalHint(e, sensorLvl) {
@@ -112,6 +113,7 @@ export function describe(e, galaxy, state, sensorLvl = 0) {
   const ic = eventIcon(e);
   if (e.type === 'distress') return { ...ic, title: 'Distress beacon', line: `Trader ${e.trader} is disabled in ${sys}. Beacon fades at the end of today. ${signalHint(e, sensorLvl)}` };
   if (e.type === 'vein') { const f = systemData(galaxy, e.sys).fields[e.field]; return { ...ic, title: 'Lumenite surge', line: `${f ? f.name : 'An asteroid field'} in ${sys} is shedding Lumenite. Today only.` }; }
+  if (e.type === 'wreck') return { ...ic, title: 'Passenger tip', line: `A passenger says an unlisted wreck is drifting in ${sys}. Salvage it before Day ${e.end + 1}.` };
   if (e.type === 'base') { const d = systemData(galaxy, e.sys).derelicts[e.derelict]; return { ...ic, title: 'Pirate base', line: `The ${e.name} gang has fortified the ${d ? d.name : 'derelict'} in ${sys}. Armed and guarded, rich loot. ${left(e, day)}.` }; }
   return { ...ic, title: e.title, line: `${MARKET_EVENTS[e.eco].blurb(sys)} ${e.scope === 'all' ? '' : '(local) '}${left(e, day)}.` };
 }
@@ -207,6 +209,15 @@ export class SectorEvents {
       this.rt.set(e.id, { kind: 'distress', ship: t, pos: t.pos });
       return;
     }
+    if (e.type === 'wreck') {
+      const D = buildDerelict(e.seed);
+      D.group.position.copy(this.openSpacePos(e.seed));
+      D.group.rotation.set(1.1, e.seed % 6, 0.4);
+      D.lamp.material = D.lamp.material.clone(); D.lamp.material.color.set(0xffd34a); D.glow.material = D.glow.material.clone(); D.glow.material.color.set(0xffd34a);
+      g.scene.add(D.group);
+      this.rt.set(e.id, { kind: 'wreck', obj: D, pos: D.group.position });
+      return;
+    }
     if (e.type === 'base') {
       const d = W.derelicts[e.derelict]; if (!d) { this.rt.set(e.id, { kind: 'base' }); return; }
       d.group.visible = false; d.occupied = true;
@@ -232,6 +243,7 @@ export class SectorEvents {
       if (g.target === r.ship) g.target = null;
       r.ship.remove();
     }
+    if (r.kind === 'wreck' && r.obj) g.scene.remove(r.obj.group);
     if (r.kind === 'base') {
       if (r.ship && !r.ship.dead) { r.ship.beam && (r.ship.beam.visible = false); if (g.target === r.ship) g.target = null; r.ship.remove(); }
       if (r.derelict) { r.derelict.group.visible = true; r.derelict.occupied = false; }
@@ -254,6 +266,29 @@ export class SectorEvents {
       if (clear) return p;
     }
     return st.clone().add(new THREE.Vector3(1400, 0, 900));
+  }
+
+  // a quiet spot away from lanes, planets and fields (for hidden wrecks)
+  openSpacePos(seed) {
+    const W = this.g.world, rng = new RNG(seed + 31);
+    for (let i = 0; i < 30; i++) {
+      const a = rng.range(0, Math.PI * 2), r = rng.range(3000, 7000);
+      const p = new THREE.Vector3(Math.cos(a) * r, rng.range(-150, 150), Math.sin(a) * r);
+      const clear = W.planets.every((pl) => pl.pos.distanceTo(p) > pl.radius + 450) && W.fields.every((f) => f.center.distanceTo(p) > f.radius + 200)
+        && W.station.pos.distanceTo(p) > 800 && W.gates.every((gt) => gt.pos.distanceTo(p) > 800);
+      if (clear) return p;
+    }
+    return new THREE.Vector3(4000, 0, -3000);
+  }
+
+  // passenger tip: an unlisted wreck appears on the chart until a couple of days after the contract's deadline
+  addTip(m) {
+    const s = this.state;
+    const e = { id: `wreck-${m.id}`, type: 'wreck', sys: m.side.sys, start: s.day, end: m.deadline + 2, at: 0, seed: m.side.seed, who: m.who, status: 'active' };
+    s.events.list.push(e);
+    const sysName = this.g.galaxy.systems[e.sys].name;
+    this.g.ui.toast(`✧ A passenger leans in: "There's a wreck nobody's claimed in ${sysName}." Marked on your chart.`, 'good', 6);
+    this.sync();
   }
 
   // tint a field's haze and re-colour a share of its rocks to glow Lumenite green
@@ -316,6 +351,10 @@ export class SectorEvents {
   // ---- ASSIST interaction (hold action near a disabled trader) ----
   interaction(p) {
     for (const [id, r] of this.rt) {
+      if (r.kind === 'wreck' && r.pos.distanceTo(p.pos) < 160) {
+        const pct = this.assist && this.assist.id === id ? Math.round(this.assist.t / ASSIST_TIME * 100) : 0;
+        return { type: 'assist', label: pct ? `SALVAGING ${pct}%` : 'SALVAGE TIP WRECK', hold: true, warm: true, eventId: id, target: r.pos };
+      }
       if (r.kind !== 'distress' || r.ship.dead || !r.ship.disabled) continue;
       const e = this.find(id); if (!e || e.status !== 'active') continue;
       if (r.ship.pos.distanceTo(p.pos) < 170 + r.ship.radius) {
@@ -331,11 +370,12 @@ export class SectorEvents {
     if (!this.assist || this.assist.id !== act.eventId) this.assist = { id: act.eventId, t: 0 };
     this.assist.t += dt;
     const from = g.muzzleWorld(g.player, 0, new THREE.Vector3());
-    g.fx.showBeam(g.mineBeam, from, act.ship.pos, 1.1);
+    g.fx.showBeam(g.mineBeam, from, act.ship ? act.ship.pos : act.target, 1.1);
     g.audio.loop('mine', 'mine', true, 0.25, 0.4);
     if (this.assist.t >= ASSIST_TIME) {
       this.assist = null; g.mineBeam.visible = false; g.audio.loop('mine', 'mine', false); g.input.mine = false;
-      this.rescue(this.find(act.eventId), act.ship);
+      const e = this.find(act.eventId);
+      if (e && e.type === 'wreck') this.salvageTip(e); else this.rescue(e, act.ship);
     }
   }
   rescue(e, t) {
@@ -353,6 +393,21 @@ export class SectorEvents {
     t.disabled = false; t.hp = Math.max(t.hp, t.maxHp * 0.6); t.throttle = 0.6; t.pitch = 0; t.roll = 0;
     if (t.beacon) t.beacon.visible = false;
     this.rt.delete(e.id);
+  }
+
+  salvageTip(e) {
+    const g = this.g, rng = new RNG(e.seed + 11), r = this.rt.get(e.id);
+    e.status = 'done';
+    const credits = 600 + rng.int(0, 900) + pilotRank(this.state) * 200;
+    g.addCredits(credits);
+    const k = rng.pick(['luxury', 'data', 'lumenite', 'medical']);
+    const q = Math.min(g.cargoFree(), rng.int(3, 8));
+    if (q > 0) g.player.cargo[k] = (g.player.cargo[k] || 0) + q;
+    let extra = '';
+    if (g.player.stats.mslCap > 0) { g.player.missiles = Math.min(g.player.stats.mslCap, g.player.missiles + 2); extra = ' + 2 missiles'; }
+    g.ui.toast(`✧ The tip was good! Salvaged ◈ ${fmt(credits)}${q > 0 ? ` + ${q} ${COMM[k].name}` : ''}${extra}`, 'good', 5);
+    g.audio.play('coins', { vol: 0.8 });
+    if (r) { g.fx.particles.burst(r.pos, 30, 40, 0xffd34a, 4, 1.0); this.dematerialize(e.id, r); }
   }
 
   addRep(n) {
@@ -403,6 +458,7 @@ export class SectorEvents {
       const e = this.find(id); if (!e) continue;
       if (r.kind === 'distress' && r.ship.disabled) out.push({ key: `ev_${id}`, pos: r.pos, name: `📡 DISTRESS · ${e.trader}`, edge: true, ship: r.ship });
       if (r.kind === 'base' && r.ship && !r.ship.dead) out.push({ key: `ev_${id}`, pos: r.pos, name: `☠ ${r.ship.name.toUpperCase()}`, edge: true, ship: r.ship });
+      if (r.kind === 'wreck') out.push({ key: `ev_${id}`, pos: r.pos, name: '✧ TIP: UNLISTED WRECK', edge: true });
     }
     return out;
   }
@@ -412,6 +468,7 @@ export class SectorEvents {
       const e = this.find(id); if (!e) continue;
       if (r.kind === 'distress' && r.ship.disabled) out.push({ kind: 'event', ev: e, pos: r.pos, name: `Distress · ${e.trader}`, color: '#f0703c', r: 6, arrive: 140 });
       if (r.kind === 'base' && r.ship && !r.ship.dead) out.push({ kind: 'event', ev: e, pos: r.pos, name: `${e.name} Base`, color: '#ff4a3a', r: 7, arrive: 900 });
+      if (r.kind === 'wreck') out.push({ kind: 'event', ev: e, pos: r.pos, name: 'Unlisted wreck', color: '#ffd34a', r: 6, arrive: 110 });
     }
     return out;
   }

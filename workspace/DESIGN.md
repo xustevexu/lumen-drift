@@ -98,6 +98,23 @@ Modules per ship (independent levels 0–3): Engine, Cargo Pod, Barrier, Beam, M
 - Persistence: `state.missions`, `state.offers` in the save; older saves get empty lists.
 - Asset impact: none needed — UI-only feature using existing fonts, audio (coins/click/alarm) and the print UI style; no new 3D content, so post-processing, shaders and atmosphere are unaffected (impact assessed, prior visual evidence stands).
 
+## 12c. Sector events (src/events.js)
+- Rolled once per in-game day for every system from seed+day (reloads never reroll); stored in `state.events`, 3D objects only for the current system.
+- distress (7%/system/day, today only, appears mid-day): disabled trader, hold ASSIST 4 s → credits + rep +2 + maybe cargo; 28% lure (40% frontier) springs an ambush within 750 m. Sensor Mk1 hints (75% right), Mk2 reveals.
+- vein (6%, today only): one field glows green, +30% Lumenite chance per unit mined.
+- market (3%, 2–3 days, max 2 active): economy-specific shock (blight/collapse/strike/glut/colony rush); full effect at origin, 70% elsewhere for sector-wide ones. `priceMult` in economy.js.
+- base (3.5%, ×2 frontier, 3 days, max 1, never the start system, from day 3): pirate fortress on a derelict (static armed Ship, `buildPirateBaseTemplate`), launches 2–4 guards inside 2.2 km; destroying it drops big loot + one free module level.
+- wreck: passenger tip from a contract (see 12d); salvage within 160 m.
+- Reputation (`state.rep`, global): rescues +2, saving traders +1, bases +3, attacking traders −3. Tiers adjust contract pay (−10%…+20%) and repairs (+15%…−20%).
+- Debug: `?event=distress|vein|market|base` (`&trap=1` for a lure).
+
+## 12d. Contract modifiers & station standing (src/missions.js)
+- Courier `hot` (~17% base): +60% pay, bigger deposit, +10% daily raid chance aboard, high outlaw lure.
+- Passenger `side` (~35% of non-VIP): `detour` (drop 1 passenger at another planet in the destination system for a bonus; frees 2 hold) or `wreck` (reveals an unlisted salvage wreck as an event).
+- VIP `req` (~60%): demands a hull (Kestrel/Bastion or Mule) or module level; +30% pay; checked at accept.
+- Supply `ore` (~26%): also needs N Lumenite/Cobaltine/Helion mined by the player while the contract is active (`oreMined` counter); bought ore doesn't count.
+- Station standing (`state.standing[sysId]`): +1 per completed contract from that station (+2 for special jobs), −2 failed, −1 abandoned. Tiers: Blacklisted (<−2: −2 offers, −15% pay), New face, Regular (3: +5%), Preferred (8: +10%, +1 offer, no deposits), Partner (15: +15%, daily Priority contract ×1.35). Each tier above New face also raises special-contract odds by 7 points.
+
 ## 13. Completion criteria
 - Start screen loads, START enters flight.
 - Player can steer, throttle, mine an asteroid (cargo increases), dock, sell ores (credits increase), buy goods, jump to another system, sell goods there.

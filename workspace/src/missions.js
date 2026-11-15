@@ -1,7 +1,7 @@
 // Contract missions: courier jobs, passenger transport (incl. VIPs) and supply runs.
 // Pure data/logic here; the Game applies effects (credits, cargo, autopilot) and the UI renders.
 import { RNG } from './rng.js';
-import { COMM, COMMODITIES, ECONOMIES } from './data.js';
+import { COMM, COMMODITIES, ECONOMIES, HULLS, MODULES } from './data.js';
 import { generateSystem } from './galaxy.js';
 
 export const MAX_ACTIVE = 4;
@@ -37,7 +37,37 @@ export function normalizeMissionState(state) {
   if (!Array.isArray(state.missions)) state.missions = [];
   if (!state.offers || typeof state.offers !== 'object') state.offers = {};
   if (!Number.isFinite(state.stats.contracts)) state.stats.contracts = 0;
+  if (!state.standing || typeof state.standing !== 'object') state.standing = {};
   return state;
+}
+
+// ---- station standing: per-station contract reputation ----
+export const STANDING_TIERS = [
+  { min: -Infinity, name: 'Blacklisted', pay: -0.15, offers: -2, perks: 'Fewer offers, lower pay' },
+  { min: -2, name: 'New face', pay: 0, offers: 0, perks: '' },
+  { min: 3, name: 'Regular', pay: 0.05, offers: 0, perks: '+5% pay · more special contracts' },
+  { min: 8, name: 'Preferred', pay: 0.1, offers: 1, perks: '+10% pay · extra offer · no deposits' },
+  { min: 15, name: 'Partner', pay: 0.15, offers: 1, perks: '+15% pay · extra offer · no deposits · daily priority contract' },
+];
+export function standingOf(state, sysId) { return (state.standing && state.standing[sysId]) || 0; }
+export function standingTier(pts) { let t = STANDING_TIERS[0], i = 0; STANDING_TIERS.forEach((x, k) => { if (pts >= x.min) { t = x; i = k - 1; } }); return { ...t, level: i }; }
+export function nextStanding(pts) { return STANDING_TIERS.find((x) => x.min > pts) || null; }
+// how much standing a finished contract earns: special jobs count double
+export function standingGain(m) { return 1 + (m.hot || m.vip || m.ore || m.priority ? 1 : 0); }
+
+// extra daily outlaw-raid chance while this contract is aboard
+export function missionDanger(m) { return m.vip ? 0.12 : m.hot ? 0.10 : 0; }
+
+// VIP demands on the ship that carries them
+export function reqMet(m, rec) {
+  if (!m.req) return true;
+  if (m.req.hull) return rec.hull === m.req.hull || (m.req.hull === 'kestrel' && rec.hull === 'bastion');
+  return (rec.mods[m.req.mod] || 0) >= m.req.lvl;
+}
+export function reqText(req) {
+  if (!req) return '';
+  if (req.hull) return req.hull === 'kestrel' ? 'an armed Kestrel (or Bastion)' : `a ${HULLS[req.hull].name} ${HULLS[req.hull].cls}`;
+  return `${MODULES[req.mod].name} Mk${req.lvl}+`;
 }
 export function validateMissions(s) {
   if (s.missions == null) return;
@@ -49,15 +79,16 @@ export function validateMissions(s) {
 
 export function missionSpace(m) { return m.type === 'courier' ? m.qty : m.type === 'passenger' ? m.pax * PAX_SPACE : 0; }
 // rough value outlaws see in a ship carrying this contract
-export function missionLure(m) { return m.type === 'courier' ? m.qty * 35 : m.type === 'passenger' ? m.pax * (m.vip ? 400 : 60) : 0; }
+export function missionLure(m) { return m.type === 'courier' ? m.qty * 35 + (m.hot ? 1500 : 0) : m.type === 'passenger' ? m.pax * (m.vip ? 400 : 60) : 0; }
 export function boundToShip(m) { return m.type !== 'supply'; }
 export function daysLeft(m, day) { return m.deadline - day; }
 
 // ---- offer generation (deterministic per station per day) ----
 function makeOffer(rng, ctx, i) {
-  const { galaxy, sysId, day, rank } = ctx;
+  const { galaxy, sysId, day, rank, tier } = ctx;
   const dist = ctx.dist;
-  const rankMul = 1 + rank * 0.15;
+  const rankMul = (1 + rank * 0.15) * (1 + tier.pay);
+  const special = 0.07 * Math.max(0, tier.level); // better standing → more special contracts
   const round10 = (v) => Math.round(v / 10) * 10;
   const type = rng.weighted({ courier: 3, passenger: 3, supply: 2 });
   const others = galaxy.systems.filter((s) => s.id !== sysId && dist[s.id] <= 3);
@@ -86,8 +117,16 @@ function makeOffer(rng, ctx, i) {
     const c = wanted.length ? rng.pick(wanted) : rng.pick(COMMODITIES);
     const qty = rng.chance(0.65) ? rng.int(6, 16) : rng.int(20, 45);
     const j = dist[dest.sys];
-    return { ...base, dest, jumps: j, commodity: c.id, qty, title: `Supply ${qty} ${c.name}`,
-      reward: round10(qty * c.base * mult[c.id] * 1.4 * (1 + rank * 0.05)), deposit: 0, deadline: day + 2 + j * 2 };
+    const offer = { ...base, dest, jumps: j, commodity: c.id, qty, title: `Supply ${qty} ${c.name}`,
+      reward: round10(qty * c.base * mult[c.id] * 1.4 * (1 + rank * 0.05) * (1 + tier.pay)), deposit: 0, deadline: day + 2 + j * 2 };
+    // the station also wants an ore you must mine yourself (bought ore doesn't count)
+    const oreRoll = rng.next(), orePick = rng.weighted({ lumenite: 2, cobalt: 3, helion: 2 });
+    if (oreRoll < 0.3 + special && orePick !== c.id) {
+      const oq = orePick === 'lumenite' ? 3 + Math.floor(rng.next() * 4) : 8 + Math.floor(rng.next() * 8);
+      Object.assign(offer, { ore: orePick, oreQty: oq, oreMined: 0, title: `${offer.title} + ${oq} mined ${COMM[orePick].name}`,
+        reward: offer.reward + round10(oq * COMM[orePick].base * 2.2), deadline: offer.deadline + 1 });
+    }
+    return offer;
   }
   const dest = destFor(true);
   const j = dist[dest.sys];
@@ -96,25 +135,53 @@ function makeOffer(rng, ctx, i) {
     const roll = rng.next();
     const qty = roll < 0.6 ? rng.int(6, 16) : roll < 0.9 ? rng.int(20, 45) : rng.int(55, 110);
     const cargo = rng.pick(CARGO);
-    return { ...base, dest, jumps: j, qty, cargoName: cargo, title: `Deliver ${qty} units of ${cargo}`,
-      reward: round10((180 + 380 * j + qty * (9 + 6 * j) + planetBonus * 120) * rankMul), deposit: round10(qty * 12), deadline: day + 1 + j * 2 + planetBonus };
+    // hot cargo: outlaws know what's in the crates — more raids, more pay
+    const hot = rng.next() < 0.18 + special;
+    return { ...base, dest, jumps: j, qty, cargoName: cargo, hot, title: hot ? `Hot cargo: ${qty} units of ${rng.pick(HOT_CARGO)}` : `Deliver ${qty} units of ${cargo}`,
+      reward: round10((180 + 380 * j + qty * (9 + 6 * j) + planetBonus * 120) * rankMul * (hot ? 1.6 : 1)), deposit: round10(qty * (hot ? 18 : 12)), deadline: day + 1 + j * 2 + planetBonus };
   }
   const vip = rng.chance(0.22);
   const pax = vip ? rng.int(1, 2) : rng.int(1, 6);
   const who = vip ? rng.pick(VIPS) : rng.pick(GROUPS);
-  const reward = round10((140 + 330 * j + pax * (70 + 60 * j) + planetBonus * 100) * (vip ? 1.8 : 1) * rankMul);
-  return { ...base, dest, jumps: j, pax, vip, who, title: vip ? `Escort ${who}${pax > 1 ? ' + aide' : ''}` : `Transport ${pax} passenger${pax > 1 ? 's' : ''} (${who})`,
+  let reward = round10((140 + 330 * j + pax * (70 + 60 * j) + planetBonus * 100) * (vip ? 1.8 : 1) * rankMul);
+  const offer = { ...base, dest, jumps: j, pax, vip, who, title: vip ? `Escort ${who}${pax > 1 ? ' + aide' : ''}` : `Transport ${pax} passenger${pax > 1 ? 's' : ''} (${who})`,
     reward, deposit: 0, deadline: day + 1 + j * 2 + planetBonus };
+  const r1 = rng.next(), r2 = rng.next(), r3 = rng.next(), r4 = rng.next();
+  if (vip && r1 < 0.6) {
+    // VIP demands: a particular hull, or a module at a minimum level
+    const lvl = rank >= 2 ? 2 : 1;
+    const opts = [{ hull: 'kestrel' }, { hull: 'mule' }, { mod: 'barrier', lvl }, { mod: 'beam', lvl }, { mod: 'hull', lvl }, { mod: 'sensors', lvl: 1 }];
+    offer.req = opts[Math.floor(r2 * opts.length)];
+    offer.reward = round10(offer.reward * 1.3);
+  } else if (!vip && r1 < 0.35 + special) {
+    const dsd = systemData(galaxy, dest.sys);
+    const planets = dsd.planets.map((_, k) => k).filter((k) => !(dest.kind === 'planet' && dest.planet === k));
+    if (r2 < 0.5 && pax >= 2 && planets.length) {
+      const pi = planets[Math.floor(r3 * planets.length)];
+      offer.side = { kind: 'detour', sys: dest.sys, planet: pi, name: `${dsd.planets[pi].name} colony`, reward: round10(150 + 90 * j + r4 * 120), done: false,
+        text: `One passenger asks to be dropped at ${dsd.planets[pi].name} colony on the way` };
+    } else {
+      offer.side = { kind: 'wreck', sys: r3 < 0.5 ? dest.sys : sysId, seed: Math.floor(r4 * 1e9), text: 'A passenger claims to know where a wreck is drifting' };
+    }
+  }
+  return offer;
 }
+const HOT_CARGO = ['unregistered weapon cores', 'seized Lumenite bullion', 'black-box flight recorders', 'contraband stim crates', 'a smuggler\'s strongbox', 'prototype drive coils'];
 
 export function offersFor(state, galaxy, sysId, rank) {
   const key = String(sysId);
   let rec = state.offers[key];
   if (!rec || rec.day !== state.day) {
     const rng = new RNG((state.seed * 31 + sysId * 977 + state.day * 7919) >>> 0);
-    const ctx = { galaxy, sysId, day: state.day, rank, dist: jumpsFrom(galaxy, sysId) };
-    const n = 4 + rng.int(0, 1);
+    const tier = standingTier(standingOf(state, sysId));
+    const ctx = { galaxy, sysId, day: state.day, rank, tier, dist: jumpsFrom(galaxy, sysId) };
+    const n = Math.max(2, 4 + rng.int(0, 1) + tier.offers);
     const list = []; for (let i = 0; i < n; i++) list.push(makeOffer(rng, ctx, i));
+    if (tier.level >= 2) for (const o of list) o.deposit = 0; // Preferred+: deposits waived
+    if (tier.level >= 3) { // Partner: one priority contract a day, premium pay
+      const o = list.reduce((a, b) => (b.reward > a.reward ? b : a));
+      o.priority = true; o.reward = Math.round(o.reward * 1.35 / 10) * 10; o.title = `Priority: ${o.title}`;
+    }
     rec = { day: state.day, list, taken: [] };
     // keep the save small: only today's boards are remembered
     for (const k of Object.keys(state.offers)) if (state.offers[k].day !== state.day) delete state.offers[k];
@@ -128,6 +195,15 @@ export function markTaken(state, offer) {
 }
 
 // ---- presentation helpers ----
+export function modTags(m) {
+  const t = [];
+  if (m.priority) t.push({ label: 'PRIORITY', cls: 'prio' });
+  if (m.hot) t.push({ label: 'HOT CARGO', cls: 'hot' });
+  if (m.req) t.push({ label: 'DEMANDS', cls: 'req' });
+  if (m.side) t.push({ label: m.side.kind === 'wreck' ? 'TIP' : 'SIDE REQUEST', cls: 'side' });
+  if (m.ore) t.push({ label: 'MINE IT', cls: 'ore' });
+  return t;
+}
 export function typeTag(m) {
   if (m.type === 'passenger') return m.vip ? { label: 'VIP ESCORT', cls: 'vip' } : { label: 'PASSENGERS', cls: 'pax' };
   return m.type === 'courier' ? { label: 'COURIER', cls: 'courier' } : { label: 'SUPPLY', cls: 'supply' };
@@ -138,9 +214,12 @@ export function destText(m, galaxy, fromSys) {
   return `${m.dest.name} · ${sysName}${j === 0 ? ' (this system)' : ` (${j} jump${j > 1 ? 's' : ''})`}`;
 }
 export function needText(m) {
-  if (m.type === 'supply') return `Bring ${m.qty} ${COMM[m.commodity].name} (buy or mine it)`;
-  if (m.type === 'courier') return `Takes ${m.qty} hold space`;
-  return `Takes ${m.pax * PAX_SPACE} hold space (${m.pax} cabin${m.pax > 1 ? 's' : ''})${m.vip ? ' · outlaws hunt VIPs' : ''}`;
+  if (m.type === 'supply') return `Bring ${m.qty} ${COMM[m.commodity].name} (buy or mine it)${m.ore ? `<br>Plus <b>${m.oreQty} ${COMM[m.ore].name} you mine yourself</b>${m.ore === 'helion' ? ' (gas giant deposits)' : m.ore === 'lumenite' ? ' (rare find in asteroids)' : ''} · mined ${m.oreMined || 0}/${m.oreQty}` : ''}`;
+  if (m.type === 'courier') return `Takes ${m.qty} hold space${m.hot ? ' · <b>outlaws know about this cargo</b> (more raids)' : ''}`;
+  let t = `Takes ${m.pax * PAX_SPACE} hold space (${m.pax} cabin${m.pax > 1 ? 's' : ''})${m.vip ? ' · outlaws hunt VIPs' : ''}`;
+  if (m.req) t += `<br>Demands to travel in <b>${reqText(m.req)}</b>`;
+  if (m.side) t += `<br>${m.side.text}${m.side.kind === 'detour' ? ` (+◈ ${m.side.reward}${m.side.done ? ', done' : ''})` : m.side.revealed ? ' (location on your chart)' : ''}`;
+  return t;
 }
 export function dueText(m, day) {
   const d = m.deadline - day;
