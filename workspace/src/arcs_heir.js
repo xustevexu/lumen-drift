@@ -117,7 +117,7 @@ export class HeirArc {
       <p><b>Solak:</b> "The Institute will pay ◈${fmt(this.institutePrice())}. In our labs it could power a thousand worlds, eventually."</p>
       <p><b>Captain Varga's last log:</b> "It was always meant for whoever kept going."</p>
       <p>Or take it home: back to Lumen's Rest, where the crystals grew wild.</p>
-      <p><b style="color:#b0451a">Whatever you choose is permanent.</b></p>`),
+      <p><b style="color:#ff8a5c">Whatever you choose is permanent.</b></p>`),
     [
       { label: 'KEEP THE HEART', fn: pick('keep') },
       { label: 'GIVE IT TO THE FRINGE', fn: pick('settlers') },

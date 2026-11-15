@@ -186,7 +186,7 @@ export class ArcManager {
       <p><b>Ama:</b> "Bring it to us. The Fringe deserves to know, and to stop asking the Accord for protection."</p>
       <p><b>Mercer:</b> " ◈30,000 says you lose that data. Think about it."</p>
       <p>Or you could broadcast everything to the whole sector and let the chips fall.</p>
-      <p><b style="color:#b0451a">Whatever you choose is permanent.</b></p>`),
+      <p><b style="color:#ff8a5c">Whatever you choose is permanent.</b></p>`),
     [
       { label: 'GIVE IT TO HALE (Accord)', fn: pick('accord') },
       { label: 'GIVE IT TO AMA (Fringe)', fn: pick('fringe') },

@@ -121,7 +121,7 @@ export class DebtorArc {
       <p><b>Marrow:</b> "Give me Vex and my ledger. Your debt disappears and nobody in the Wake ever touches you again."</p>
       <p><b>Hale:</b> "Give it to the Patrol. Forty corrupt officials go down, and your debt is void under Accord law."</p>
       <p>Or keep the ledger. Every marker in the Fringe, yours included, would belong to you.</p>
-      <p><b style="color:#b0451a">Whatever you choose is permanent.</b></p>`),
+      <p><b style="color:#ff8a5c">Whatever you choose is permanent.</b></p>`),
     [
       { label: 'STAND WITH VEX', fn: pick('partner') },
       { label: 'SELL VEX TO MARROW', fn: pick('enforcer') },

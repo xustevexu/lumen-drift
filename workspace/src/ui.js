@@ -718,7 +718,7 @@ export class UI {
   outpostsHTML() {
     const g = this.g, s = g.state, max = maxOutposts(s), ft = factionTier(standingWith(s, g.sysInfo.eco));
     const why = s.credits < CHARTER_PRICE ? `◈ ${fmt(CHARTER_PRICE)}` : ft.level < 0 ? `NEEDS NEUTRAL WITH ${FACTIONS[g.sysInfo.eco].short.toUpperCase()}` : s.outposts.length + s.charters >= max ? `LIMIT ${max} AT YOUR RANK` : '';
-    const list = s.outposts.map((o) => `<p>⌂ <b>${o.name}</b> · ${g.galaxy.systems[o.sys].name} · ${builtMods(o).length} modules · storage ${storageUsed(o)}/${storageCap(o)}${o.credits ? ` · ◈${fmt(o.credits)} waiting` : ''}${o.raid && o.raid.phase !== 'pending' ? ' · <b style="color:#b0451a">⚠ RAID</b>' : ''} <button class="sbtn" data-act="opcourse" data-arg="${o.id}">SET COURSE</button></p>`).join('');
+    const list = s.outposts.map((o) => `<p>⌂ <b>${o.name}</b> · ${g.galaxy.systems[o.sys].name} · ${builtMods(o).length} modules · storage ${storageUsed(o)}/${storageCap(o)}${o.credits ? ` · ◈${fmt(o.credits)} waiting` : ''}${o.raid && o.raid.phase !== 'pending' ? ' · <b style="color:#ff8a5c">⚠ RAID</b>' : ''} <button class="sbtn" data-act="opcourse" data-arg="${o.id}">SET COURSE</button></p>`).join('');
     return `<div class="card news"><div><h3>Outposts</h3><p>Buy a charter, fly to an asteroid field or planet deposit, and press ESTABLISH OUTPOST. Modules cost credits plus materials you haul in. Production runs every day, even while you're away. Up to ${max} at your rank.</p>
       ${list}<p>Charters held: <b>${s.charters}</b> <button class="sbtn buy" data-act="charter" ${why ? 'disabled' : ''}>${why || `BUY CHARTER · ◈ ${fmt(CHARTER_PRICE)}`}</button></p></div></div>`;
   }
@@ -739,7 +739,7 @@ export class UI {
     const missing = Math.ceil(p.maxHp - p.hp);
     const repair = this.repairCost();
     const expiring = liveEvents(s).filter((e) => e.end === s.day && e.type !== 'market');
-    const restNote = expiring.length ? `<br><b style="color:#b0451a">Ends if you rest:</b> ${expiring.map((e) => `${describe(e, g.galaxy, s).title} in ${g.galaxy.systems[e.sys].name}`).join(', ')}` : '';
+    const restNote = expiring.length ? `<br><b style="color:#ff8a5c">Ends if you rest:</b> ${expiring.map((e) => `${describe(e, g.galaxy, s).title} in ${g.galaxy.systems[e.sys].name}`).join(', ')}` : '';
     const mslNeed = p.stats.mslCap - p.missiles; const mslCost = mslNeed * 60;
     const r = pilotRank(s), U = (k) => unlocked(s, k);
     return `<div class="svc">
@@ -1237,7 +1237,7 @@ export class UI {
       if (sel.kind === 'derelict') extra = '<p>Abandoned hulk. Hold SALVAGE nearby for credits & parts. Restocks every 3 days.</p>';
       if (sel.kind === 'field' && sel.field.surge) extra += '<p style="color:#4f7a10"><b>✦ Lumenite surge today:</b> far higher chance of Lumenite from every rock here.</p>';
       if (sel.kind === 'anomaly') { const a = sel.anomaly; extra = a.type === 'dormant' ? `<p>A cold, uncharted jump gate. Exodus Logs: <b>${g.state.explore.lore}/${FRAGMENTS_TO_UNLOCK}</b> to wake it.</p>` : g.state.explore.seen[a.key] === 2 || a.type === 'spire' ? `<p>${TYPES[a.type].desc} Fly close and hold INVESTIGATE.</p>` : '<p>An unidentified signal. Fly close and hold INVESTIGATE, or launch a probe to identify it.</p>'; }
-      if (sel.kind === 'outpost') { const o = sel.outpost; extra = `<p>Your outpost: ${builtMods(o).length} modules · storage ${storageUsed(o)}/${storageCap(o)}${o.credits ? ` · ◈${fmt(o.credits)} to collect` : ''}${o.raid && o.raid.phase !== 'pending' ? ' · <b style="color:#b0451a">⚠ RAID INCOMING</b>' : ''}</p>`; }
+      if (sel.kind === 'outpost') { const o = sel.outpost; extra = `<p>Your outpost: ${builtMods(o).length} modules · storage ${storageUsed(o)}/${storageCap(o)}${o.credits ? ` · ◈${fmt(o.credits)} to collect` : ''}${o.raid && o.raid.phase !== 'pending' ? ' · <b style="color:#ff8a5c">⚠ RAID INCOMING</b>' : ''}</p>`; }
       if (sel.kind === 'site') extra = `<p>Unclaimed outpost site. Ore: <b>${COMM[sel.site.ore].name}</b>${sel.site.gas ? ' (gas giant)' : ''}. Fly here and press ESTABLISH OUTPOST.</p>`;
       if (sel.kind === 'event') { const d = describe(sel.ev, g.galaxy, g.state, g.player.stats.sensorLvl); extra = `<p>${d.line}</p>${sel.ev.type === 'distress' ? '<p>Fly alongside and hold ASSIST to patch the ship up.</p>' : sel.ev.type === 'wreck' ? '<p>Fly close and hold SALVAGE.</p>' : '<p>Approach and the base launches its guards. Destroy the base itself for the loot.</p>'}`; }
       const d = (sel.dest || sel.pos).distanceTo(g.player.pos);
@@ -1263,7 +1263,7 @@ export class UI {
       const evs = liveEvents(g.state).filter((e) => e.sys === s.id).map((e) => { const d = describe(e, g.galaxy, g.state, g.player.stats.sensorLvl); return `<p><b style="color:${d.col}">${d.ch}</b> <b>${d.title}:</b> ${d.line}</p>`; }).join('');
       const ft = factionTier(standingWith(g.state, s.eco));
       const es = systemExploreStatus(g.state, g.galaxy, s.id), exploreTxt = `<p><small>Anomalies: ${es.seen} of ${es.total} found, ${es.done} investigated</small></p>`;
-      const SA = g.state.siege.active, siegeTxt = SA && SA.phase !== 'done' && SA.target.sys === s.id ? `<p style="color:#b0451a"><b>⚔ Siege:</b> ${g.siege.newsLine()}</p>` : '';
+      const SA = g.state.siege.active, siegeTxt = SA && SA.phase !== 'done' && SA.target.sys === s.id ? `<p style="color:#ff8a5c"><b>⚔ Siege:</b> ${g.siege.newsLine()}</p>` : '';
       box.innerHTML = `<h4>${s.name}</h4><p><b>${isAccordEco(s.eco) ? '🛡 ACCORD SPACE' : 'THE FRINGE'}</b> · ${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * (isAccordEco(s.eco) ? 55 : 115))}%/day</p><p><b style="color:${FACTIONS[s.eco].color}">${FACTIONS[s.eco].name}</b> · you are <b>${ft.name}</b>${ft.level <= -1 ? ' <span style="color:#ff6b4a">(enforcers may hunt you)</span>' : ''}</p>${siegeTxt}${exploreTxt}${evs}${ms}${rows}${btn}`;
     }
   }
