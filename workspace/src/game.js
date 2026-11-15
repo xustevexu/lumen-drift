@@ -182,6 +182,7 @@ export class Game {
     if (params.get('event')) setTimeout(() => this.events.force(params.get('event')), 300);
     if (fresh && origin) this.story.opening();
     else if (!this.state.tutorial.docked) setTimeout(() => this.ui.toast('Welcome, pilot. Mine rocks in the field or dock at the station to trade.', 'info', 6), 600);
+    this.story.tips();
   }
 
   // ---------------------------------------------------------------- ships

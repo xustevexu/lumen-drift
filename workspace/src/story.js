@@ -223,6 +223,19 @@ export class Story {
     const box = document.getElementById('dialogBox'); box.classList.remove('originBox'); box.classList.add('introBox');
     document.getElementById('dialog').classList.add('introOv');
   }
+  // how to open things on the device actually in use: controller, touch screen or keyboard
+  howTo(what) {
+    const pad = this.g.pad, L = pad && pad.layout;
+    if (pad && pad.active && L) return what === 'map' ? `press ${L.BACK} on your controller` : `press ${L.START} on your controller and choose MESSAGE LOG`;
+    const touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    if (touch) return what === 'map' ? 'tap MAP at the top right' : 'tap the pause button (❚❚) at the top right and choose MESSAGE LOG';
+    return what === 'map' ? 'press M (or click MAP at the top right)' : 'press Esc (or click ❚❚ at the top right) and choose MESSAGE LOG';
+  }
+  // early tips, once per career (older saves get them once too)
+  tips() {
+    setTimeout(() => this.comm('wick', `Missed something? Every message, mine included, is saved. To read them again, ${this.howTo('log')}.`, { once: 'tip-log' }), 9000);
+    setTimeout(() => this.comm('wick', `Your map shows this system and the whole galaxy: stations, fields, gates, events. To open it, ${this.howTo('map')}. Pick anything on it to set a course.`, { once: 'tip-map' }), 40000);
+  }
   // first moments of a new career
   opening() {
     const s = this.state, o = s.story.origin;
