@@ -208,10 +208,13 @@ export class Story {
   // ---- new career: pick an origin, then the intro ----
   chooseOrigin(onPick) {
     const ui = this.g.ui;
-    const cards = ORIGIN_IDS.map((id) => { const o = ORIGINS[id]; return `<div class="origin"><div class="origin-pic"><img src="./portraits/${id}.jpg" alt="${o.name}"></div><div><b>${o.name}</b> <small>${o.tag}</small><p>${o.blurb}</p><p class="origin-perks">${o.perks}</p></div></div>`; }).join('');
+    const cards = ORIGIN_IDS.map((id) => { const o = ORIGINS[id]; return `<button class="origin" data-origin="${id}"><div class="origin-pic"><img src="./portraits/${id}.jpg" alt="${o.name}"></div><div><b>${o.name}</b> <small>${o.tag}</small><p>${o.blurb}</p><p class="origin-perks">${o.perks}</p></div></button>`; }).join('');
     ui.dialog(`<div class="ov-title">WHO ARE YOU?</div><p>Your past decides where you start, who already knows your name, and the story that follows you.</p>${cards}`,
-      [...ORIGIN_IDS.map((id) => ({ label: ORIGINS[id].name.toUpperCase(), fn: () => this.intro(id, onPick) })), { label: 'BACK' }]);
-    document.getElementById('dialogBox').classList.add('originBox');
+      [{ label: 'BACK' }]);
+    const box = document.getElementById('dialogBox'); box.classList.add('originBox');
+    // the portrait cards themselves are the choices
+    const first = box.querySelector('button.origin'); if (first && this.g.pad && this.g.pad.active) this.g.pad.setFocus(first);
+    for (const b of box.querySelectorAll('button.origin')) b.addEventListener('click', () => { document.getElementById('dialog').classList.add('hidden'); this.g.audio.play('click', { vol: 0.4 }); this.intro(b.dataset.origin, onPick); });
   }
   intro(id, onPick) {
     const o = ORIGINS[id];
@@ -220,6 +223,8 @@ export class Story {
     this.g.ui.dialog(`<img class="intro-pic" src="./portraits/${id}.jpg" alt=""><div class="intro-title">${o.name.toUpperCase()}</div>${lines}<div class="callsign"><label>YOUR CALLSIGN</label><input id="csInput" maxlength="20" value="${cs}"><button class="cs-roll" title="Random callsign">🎲</button></div>`, [{ label: 'BEGIN', primary: true, fn: () => { const v = (document.getElementById('csInput').value || '').trim().replace(/[<>&"]/g, '').slice(0, 20); this.pendingCallsign = v || cs; onPick(id); } }]);
     document.querySelector('.cs-roll').addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('csInput').value = randomCallsign(); });
     const inp = document.getElementById('csInput'); for (const ev of ['keydown', 'keyup']) inp.addEventListener(ev, (e) => e.stopPropagation());
+    // controller: start on BEGIN, not the dice
+    const begin = [...document.getElementById('dialogBox').querySelectorAll('button.pbtn')].pop(); if (begin && this.g.pad && this.g.pad.active) this.g.pad.setFocus(begin);
     const box = document.getElementById('dialogBox'); box.classList.remove('originBox'); box.classList.add('introBox');
     document.getElementById('dialog').classList.add('introOv');
   }

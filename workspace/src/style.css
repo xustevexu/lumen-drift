@@ -464,3 +464,7 @@ body:has(#dialog:not(.hidden)) #comm { display: none; }
 .msglog p { color: var(--ink); }
 .callsign input { color: var(--ink); }
 #dialogBox.introBox { color: #f2ead8; }
+/* origin cards are the buttons */
+button.origin { width: 100%; text-align: left; font: inherit; color: var(--ink); cursor: pointer; transition: transform 90ms ease, border-color 90ms ease, background 120ms; }
+button.origin:hover, button.origin.gp-focus { border-color: var(--warm); background: #2a3550; transform: translate(-1px, -1px); }
+button.origin:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
