@@ -20,6 +20,7 @@ import { OutpostManager, normalizeOutpostState } from './outposts.js';
 import { SiegeManager, normalizeSiegeState } from './siege.js';
 import { FleetManager, normalizeFleetState } from './fleet.js';
 import { ExploreManager, normalizeExploreState } from './explore.js';
+import { normalizeCraftState } from './craft.js';
 import { SectorEvents, normalizeEventState } from './events.js';
 import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
 import { RNG, clamp, damp, fmt } from './rng.js';
@@ -72,7 +73,7 @@ export class Game {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveOnLeave(); });
     window.addEventListener('pagehide', saveOnLeave);
     this.state = saved || newState(params.get('seed') ? Number(params.get('seed')) : Math.floor(Math.random() * 1e9));
-    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state); normalizeSiegeState(this.state); normalizeFleetState(this.state); normalizeExploreState(this.state);
+    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state); normalizeSiegeState(this.state); normalizeFleetState(this.state); normalizeExploreState(this.state); normalizeCraftState(this.state);
     this.hasSave = !!saved;
     this.applyQuality(this.state.quality);
 
@@ -153,7 +154,7 @@ export class Game {
     if (fresh) {
       clearAuto();
       const seed = Math.floor(Math.random() * 1e9);
-      this.state = normalizeExploreState(normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed))))))));
+      this.state = normalizeCraftState(normalizeExploreState(normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed)))))))));
       clearSystemCache();
       this.galaxy = generateGalaxy(seed);
       this.economy = new Economy(this.galaxy, this.state);
@@ -665,7 +666,7 @@ export class Game {
 
   // Replace the whole career with a loaded save (slot, autosave or imported file).
   loadGame(state) {
-    this.state = normalizeExploreState(normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(state)))))));
+    this.state = normalizeCraftState(normalizeExploreState(normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(state))))))));
     clearSystemCache();
     this.galaxy = applyUnlocks(generateGalaxy(state.seed), state);
     this.economy = new Economy(this.galaxy, state);

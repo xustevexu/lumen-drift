@@ -11,6 +11,7 @@ import { FACTIONS, factionTier, standingWith } from './factions.js';
 import { jumpsFrom, routePath } from './missions.js';
 import { builtMods, countBuilt } from './outposts.js';
 import { dogfight } from './ai.js';
+import { blueprintDrop } from './craft.js';
 
 export const MILITIA_PRICE = 2500, MILITIA_MAX = 4;
 const LEAD_DAYS = 3, ARRIVE_AT = 0.4; // announced 3 days ahead; armada arrives at 09:36 on the day
@@ -204,6 +205,7 @@ export class SiegeManager {
       const k = open[Math.floor(Math.random() * open.length)]; rec.mods[k]++; g.refreshPlayerStats();
       setTimeout(() => g.ui.toast(`⚙ Dreadnought salvage: ${MODULES[k].name} upgraded to Mk${rec.mods[k]} (free)`, 'good', 6), 1500);
     }
+    blueprintDrop(g, 1, 'Dreadnought');
     g.ui.toast(`☠ Dreadnought ${this.A.flagship} destroyed! Loot crates released (◈${fmt(credits)} + cargo)`, 'good', 5);
   }
   victory() {

@@ -153,6 +153,14 @@ Modules per ship (independent levels 0–3): Engine, Cargo Pod, Barrier, Beam, M
 - Lumen's Rest: a 10th system generated after the nine with its own RNG (charted systems are byte-identical to older versions; verified on 5 seeds). Hidden from the galaxy chart and events until `state.explore.unlocked`. A dormant gate sits in the host system (nearest charted system to the hidden one). Recovering 7 of the 9 charted logs wakes it (`applyUnlocks` adds the link; gate to a hidden system uses a separate RNG so the host layout never shifts). Lumen's Rest: Halcyon Ark station, Lumenite-rich fields, two crystal pockets, and the Heart Spire (final log + ◈15,000 + the Lumen Heart artifact: unique module, +35% energy & recharge, +20% barrier; install free from Upgrades).
 - Codex: Services → Exploration card lists recovered logs; galaxy info shows anomalies found/investigated per system.
 
+## 12j. Fabrication & prototypes (src/craft.js)
+- Fabricators only at Industrial and High-Tech stations (Upgrades tab → FABRICATION).
+- Module upgrades can be fabricated for 45% of the buy price plus materials from the hold: Mk1 4 Parts; Mk2 8 Parts + 3 Data; Mk3 12 Parts + 6 Data + 4 Lumenite.
+- Prototype blueprints (`state.craft.blueprints`) drop from: Dreadnought 100%, pirate base 60%, sentinel cache 40%, rift readings 25%, Lantern Fleet wreck 10% (each roll gives a blueprint not yet owned). Prototypes are unique modules (share the unique slot with faction modules): Phase Capacitor (+20% beam, +20% energy regen), Graviton Hold (+30% cargo), Afterburner Coils (+10% speed, +20% turn), Seeker Warheads (+40% missile dmg, +2 capacity), Ore Resonator (+20% mining, +6 pts rare). Each costs ◈7,500–9,500 + refined goods. Removing refunds half; the blueprint is kept.
+
+## 12k. Sky (shaders.js skyMaterial)
+- Rewritten for more open space: deep-black base, nebula only where noise peaks inside one or two per-system lobes, per-system galactic band with unresolved star glow and soft dust lanes, three star layers with colour tints (denser inside the band), two faint distant galaxies. Output clamped to 0.72 so no sky pixel crosses the bloom threshold (a bloomed single star pixel smears into a visible square).
+
 ## 13. Completion criteria
 - Start screen loads, START enters flight.
 - Player can steer, throttle, mine an asteroid (cargo increases), dock, sell ores (credits increase), buy goods, jump to another system, sell goods there.

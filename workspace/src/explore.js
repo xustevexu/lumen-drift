@@ -10,6 +10,7 @@ import { softTexture, portalMaterial } from './shaders.js';
 import { pilotRank } from './economy.js';
 import { applyUnlocks } from './galaxy.js';
 import { clearSystemCache, jumpsFrom } from './missions.js';
+import { blueprintDrop } from './craft.js';
 
 export const PROBE_PRICE = 300, PROBE_MAX = 5, FRAGMENTS_TO_UNLOCK = 7, HOLD_TIME = 4;
 
@@ -255,6 +256,7 @@ export class ExploreManager {
     const giveCargo = (k, n) => { const q = Math.min(n, g.cargoFree()); if (q > 0) g.player.cargo[k] = (g.player.cargo[k] || 0) + q; return q; };
     if (a.type === 'wreck') {
       const cr = 300 + rng.int(0, 500) + rank * 100; g.addCredits(cr);
+      blueprintDrop(g, 0.1, 'wreck');
       if (ex.lore < CHARTED_LORE) { const idx = ex.lore++; this.showLog(idx, `Salvaged ◈${fmt(cr)} from the wreck.`); this.checkUnlock(); }
       else g.ui.toast(`Salvaged ◈${fmt(cr)}. The log core was already wiped.`, 'good', 4);
     } else if (a.type === 'pocket') {
@@ -267,12 +269,14 @@ export class ExploreManager {
       g.ui.toast(`⌁ Survey beacon decoded: fresh market data for ${n} systems + ◈${fmt(cr)}`, 'good', 5);
     } else if (a.type === 'rift') {
       const cr = 800 + rng.int(0, 700) + rank * 200; g.addCredits(cr); g.factionChange('hightech', 3);
+      blueprintDrop(g, 0.25, 'rift readings');
       g.ui.toast(`◎ Rift readings sold to the Lumen Institute: ◈${fmt(cr)} · Institute +3`, 'good', 5);
     } else if (a.type === 'sentinel') {
       const cr = 2000 + rng.int(0, 1000) + rank * 500; g.addCredits(cr); giveCargo('luxury', 4);
       const rec = g.activeShipRec(), open = MODULE_ORDER.filter((k) => rec.mods[k] < 3);
       let extra = '';
       if (open.length && rng.next() < 0.5) { const k = open[rng.int(0, open.length - 1)]; rec.mods[k]++; g.refreshPlayerStats(); extra = ` · ancient tech: ${MODULES[k].name} → Mk${rec.mods[k]}`; }
+      blueprintDrop(g, 0.4, 'sentinel cache');
       g.ui.toast(`⟁ Sentinel cache opened: ◈${fmt(cr)} + Luxury Crystal${extra}`, 'good', 6);
     } else if (a.type === 'spire') {
       g.addCredits(15000); ex.heart = true;

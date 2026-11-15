@@ -8,6 +8,7 @@ import { CHARTER_PRICE, maxOutposts, storageUsed, storageCap, builtMods } from '
 import { MILITIA_PRICE, MILITIA_MAX } from './siege.js';
 import { SKILLS, ROUTE_WAGE, maxWingmen, skillOf } from './fleet.js';
 import { jumpsFrom } from './missions.js';
+import { PROTOTYPES, PROTO_IDS, hasFabricator, moduleMats, matsText, haveMats, takeMats } from './craft.js';
 import { LORE, TYPES, PROBE_PRICE, PROBE_MAX, FRAGMENTS_TO_UNLOCK, systemExploreStatus } from './explore.js';
 import { FACTIONS, FACTION_ORDER, UNIQUES, UNIQUE_BY_FACTION, factionTier, nextFactionTier, standingWith, tierPerks, uniqueSlots } from './factions.js';
 import { MAX_ACTIVE, offersFor, missionSpace, boundToShip, typeTag, modTags, destText, needText, dueText, reqMet, reqText, standingOf, standingTier, nextStanding } from './missions.js';
@@ -548,6 +549,20 @@ export class UI {
     return h;
   }
 
+  fabricationHTML(rec, fab) {
+    const g = this.g, s = g.state, bps = s.craft.blueprints;
+    const slots = uniqueSlots(rec.hull), used = rec.uniques.length;
+    let h = `<div class="ms-head"><span>FABRICATION${fab ? '' : ' · NO FABRICATOR HERE'}</span><small>${fab ? 'Build module upgrades from refined goods for about half the credits, and craft prototypes from blueprints. Materials come from your hold.' : 'Fabricators are found at Industrial and High-Tech stations. Blueprints you hold are listed below.'}</small></div><div class="cards">`;
+    for (const id of PROTO_IDS) {
+      const P = PROTOTYPES[id], known = bps.includes(id), installed = rec.uniques.includes(id);
+      if (!known) { h += `<div class="card locked"><h3>${P.name}<span class="cls">BLUEPRINT NEEDED</span></h3><p>${P.desc}</p><p><small>Blueprints turn up in sentinel caches, rift readings, pirate bases and Dreadnought wrecks.</small></p></div>`; continue; }
+      const ok = fab && !installed && used < slots && s.credits >= P.credits && haveMats(g.player.cargo, P.mats);
+      const why = installed ? 'INSTALLED' : !fab ? 'NEEDS A FABRICATOR' : used >= slots ? 'NO FREE UNIQUE SLOT' : '';
+      h += `<div class="card${installed ? ' active' : ''}"><h3>${P.name}<span class="cls" style="color:#e7a6ff">PROTOTYPE</span></h3><p>${P.desc}</p><p><small>◈ ${fmt(P.credits)} + ${matsText(P.mats)}</small></p>
+        <button class="pbtn ${ok ? 'primary' : 'secondary'}" style="font-size:13px;padding:8px" data-act="fabproto" data-arg="${id}" ${ok ? '' : 'disabled'}>${why || 'FABRICATE & INSTALL'}</button></div>`;
+    }
+    return h + '</div><div class="ms-head" style="margin-top:12px"><span>STANDARD MODULES</span></div>';
+  }
   uniquePrice(id, hull) { return Math.round(UNIQUES[id].price * Math.sqrt(HULLS[hull].priceMul) / 100) * 100; }
   factionTechHTML(rec) {
     const g = this.g, s = g.state, fid = g.sysInfo.eco;
@@ -569,12 +584,12 @@ export class UI {
       h += `<div class="card${t.level < 2 ? ' locked' : ''}"><h3>${u.name}<span class="cls" style="color:${FACTIONS[u.faction].color}">${FACTIONS[u.faction].short.toUpperCase()}</span></h3><p>${u.desc}</p>
         <button class="pbtn ${why ? 'secondary' : 'primary'}" style="font-size:13px;padding:8px" data-act="buyunique" data-arg="${u.id}" ${why ? 'disabled' : ''}>${why || `INSTALL · ◈ ${fmt(price)}`}</button></div>`;
     }
-    return h + '</div><div class="ms-head" style="margin-top:12px"><span>STANDARD MODULES</span></div>';
+    return h + '</div>';
   }
   outfitHTML() {
-    const g = this.g, rec = g.activeShipRec();
+    const g = this.g, rec = g.activeShipRec(), fab = hasFabricator(g.sysInfo.eco);
     let h = `<p style="margin:2px 4px 10px;font:700 13px var(--font)">Upgrading: <b>${HULLS[rec.hull].name}</b> (${HULLS[rec.hull].cls}) — each ship keeps its own modules.</p><div class="cards">`;
-    h = this.factionTechHTML(rec) + h;
+    h = this.factionTechHTML(rec) + this.fabricationHTML(rec, fab) + h;
     for (const k of MODULE_ORDER) {
       const M = MODULES[k], lvl = rec.mods[k];
       const next = lvl < 3 ? lvl + 1 : null;
@@ -583,6 +598,7 @@ export class UI {
       h += `<div class="card"><h3>${M.name}<span class="lvl">${stamps}</span></h3><p>${M.desc}</p>
         <div class="delta">${statLine(k, lvl, rec.hull)}${next ? ` → <b>${statLine(k, next, rec.hull)}</b>` : ' · MAX'}</div>
         ${next ? `<button class="pbtn ${g.state.credits >= price ? 'primary' : 'secondary'}" style="font-size:14px;padding:9px" data-act="upgrade" data-arg="${k}" ${g.state.credits >= price ? '' : 'disabled'}>INSTALL MK${next} · ◈ ${fmt(price)}</button>` : '<button class="pbtn secondary" disabled>FULLY UPGRADED</button>'}
+        ${next && fab ? (() => { const mats = moduleMats(next), fc = Math.round(price * 0.45 / 10) * 10, ok = haveMats(g.player.cargo, mats) && g.state.credits >= fc; return `<button class="pbtn secondary" style="font-size:12px;padding:7px" data-act="fabmod" data-arg="${k}" ${ok ? '' : 'disabled'}>FABRICATE · ◈ ${fmt(fc)} + ${matsText(mats)}</button>`; })() : ''}
       </div>`;
     }
     return h + '</div>';
@@ -768,6 +784,20 @@ export class UI {
       if (s.credits >= price && rec.uniques.length < uniqueSlots(rec.hull) && factionTier(standingWith(s, UNIQUES[arg].faction)).level >= 2) {
         s.credits -= price; rec.uniques.push(arg); g.refreshPlayerStats(); p.shield = Math.min(p.shield, p.maxShield);
         g.audio.play('coins', { vol: 0.9 }); this.toast(`${UNIQUES[arg].name} installed`, 'good', 3);
+      }
+    } else if (act === 'fabmod') {
+      const rec = g.activeShipRec(), lvl = rec.mods[arg] + 1, price = modulePrice(rec.hull, arg, lvl), fc = Math.round(price * 0.45 / 10) * 10, mats = moduleMats(lvl);
+      if (lvl <= 3 && hasFabricator(g.sysInfo.eco) && s.credits >= fc && haveMats(p.cargo, mats)) {
+        s.credits -= fc; takeMats(p.cargo, mats); rec.mods[arg] = lvl; g.refreshPlayerStats(); s.craft.made++;
+        if (arg === 'missile') p.missiles = p.stats.mslCap;
+        if (arg === 'barrier') p.shield = p.maxShield;
+        g.audio.play('coins', { vol: 0.7 }); this.toast(`Fabricated ${MODULES[arg].name} Mk${lvl}: saved ◈ ${fmt(price - fc)}`, 'good', 3);
+      }
+    } else if (act === 'fabproto') {
+      const rec = g.activeShipRec(), P = PROTOTYPES[arg];
+      if (P && s.craft.blueprints.includes(arg) && hasFabricator(g.sysInfo.eco) && !rec.uniques.includes(arg) && rec.uniques.length < uniqueSlots(rec.hull) && s.credits >= P.credits && haveMats(p.cargo, P.mats)) {
+        s.credits -= P.credits; takeMats(p.cargo, P.mats); rec.uniques.push(arg); g.refreshPlayerStats(); s.craft.made++;
+        g.audio.play('warp', { vol: 0.5, rate: 1.2 }); this.toast(`${P.name} fabricated and installed`, 'good', 3.5);
       }
     } else if (act === 'heart') {
       const rec = g.activeShipRec();

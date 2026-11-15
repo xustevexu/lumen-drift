@@ -13,6 +13,7 @@ import { Ship } from './entities.js';
 import { buildPirateBaseTemplate, buildDerelict } from './ships.js';
 import { pilotRank } from './economy.js';
 import { softTexture } from './shaders.js';
+import { blueprintDrop } from './craft.js';
 
 // daily chance per system for each event type
 const CHANCE = { distress: 0.07, vein: 0.06, market: 0.03, base: 0.035 };
@@ -432,6 +433,7 @@ export class SectorEvents {
     } else { g.addCredits(3000); tech = 'Your ship is fully upgraded, so the pirate tech sold for ◈ 3,000'; }
     g.ui.toast(`☠ ${o.name} destroyed! Loot crates released (◈ ${fmt(credits)} + cargo) · all factions grateful, Red Wake −8`, 'good', 6);
     setTimeout(() => g.ui.toast(`⚙ ${tech}`, 'good', 6), 1200);
+    blueprintDrop(g, 0.6, 'pirate base');
     g.save();
   }
 

@@ -258,21 +258,48 @@ export function skyMaterial(nebA, nebB, seed = 0) {
     uniforms: { uA: { value: new THREE.Color(...nebA) }, uB: { value: new THREE.Color(...nebB) }, uSeed: { value: seed }, uIntensity: { value: 1.0 } },
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position = p.xyww; }`,
     fragmentShader: NOISE + `uniform vec3 uA,uB; uniform float uSeed, uIntensity; varying vec3 vDir;
-      float stars(vec3 d, float scale, float thr){ vec3 c = floor(d*scale); float h = hash13(c+uSeed); vec3 f = fract(d*scale)-0.5; float s = smoothstep(0.08,0.0,length(f)); return step(thr,h)*s*(h-thr)/(1.0-thr); }
+      // one star per cell: x = brightness (0 if no star), y = colour hash
+      vec2 starCell(vec3 d, float scale, float thr, float size){ vec3 c = floor(d*scale); float h = hash13(c+uSeed); vec3 f = fract(d*scale)-0.5;
+        float s = smoothstep(size,0.0,length(f)); return vec2(step(thr,h)*s*(h-thr)/(1.0-thr), hash13(c*1.7+uSeed+4.0)); }
+      vec3 starTint(float t){ return t < 0.15 ? vec3(1.0,0.72,0.55) : t < 0.32 ? vec3(1.0,0.9,0.75) : t < 0.8 ? vec3(0.95,0.97,1.0) : vec3(0.7,0.82,1.0); }
       void main(){
         vec3 d = normalize(vDir);
-        vec3 bandN = normalize(vec3(0.25, 1.0, 0.35));
-        float band = exp(-pow(dot(d, bandN)*3.2, 2.0));
-        float n1 = fbm(d*2.2 + uSeed);
-        float n2 = fbm(d*5.0 - uSeed*0.5);
-        float neb = smoothstep(-0.15, 0.7, n1 + 0.35*band) ;
-        float wisps = smoothstep(0.0, 0.6, n2) * neb;
-        vec3 col = mix(uA, uB, smoothstep(-0.3, 0.6, n2)) * (neb*0.55 + wisps*0.6) ;
-        col += vec3(0.55,0.6,0.75)*band*0.06*(0.6+0.4*n2);
-        // dark dust lanes
-        col *= 1.0 - smoothstep(0.25, 0.6, fbm3(d*7.0+3.0))*band*0.5;
-        float st = stars(d, 180.0, 0.985)*1.6 + stars(d, 380.0, 0.975)*0.8 + stars(d, 90.0, 0.994)*3.0;
-        col += vec3(0.9,0.95,1.0)*st*(0.7+0.6*band);
+        // per-system orientation: the galactic band and the nebula lobes sit in different places each system
+        float sa = uSeed*1.37, sb = uSeed*0.73;
+        vec3 bandN = normalize(vec3(0.25+0.35*sin(sa), 1.0, 0.35+0.35*cos(sb)));
+        float bd = dot(d, bandN);
+        float band = exp(-pow(bd*3.6, 2.0));
+        float bandCore = exp(-pow(bd*9.0, 2.0));
+        vec3 lobeA = normalize(vec3(cos(sa*2.1), 0.35*sin(sb*1.3), sin(sa*2.1)));
+        vec3 lobeB = normalize(vec3(-cos(sb*1.7), 0.5*cos(sa), -sin(sb*1.7)+0.3));
+        float lobe = max(smoothstep(0.25, 0.95, dot(d, lobeA)), 0.6*smoothstep(0.55, 0.98, dot(d, lobeB)));
+        float n1 = fbm(d*2.4 + uSeed), n2 = fbm(d*5.5 - uSeed*0.5);
+        // nebula only where the noise peaks inside a lobe (or faintly along the band): mostly open space
+        float neb = smoothstep(0.18, 0.75, n1*0.9 + lobe*0.75 + band*0.12 - 0.42);
+        float wisps = smoothstep(0.05, 0.55, n2) * neb;
+        vec3 col = vec3(0.004, 0.006, 0.014); // deep space
+        col += mix(uA, uB, smoothstep(-0.3, 0.6, n2)) * (neb*0.42 + wisps*0.5);
+        // galactic band: unresolved star glow with dark dust lanes
+        float lanes = 1.0 - smoothstep(0.2, 0.6, fbm3(d*8.0+3.0))*0.45;
+        col += vec3(0.42,0.44,0.55)*(band*0.05 + bandCore*0.07)*(0.6+0.4*n2)*lanes;
+        col *= 1.0 - smoothstep(0.25, 0.6, fbm3(d*7.0+3.0))*neb*0.45;
+        // stars: dense faint field (much denser in the band), mid layer, sparse bright ones with glints
+        vec2 s1 = starCell(d, 420.0, mix(0.978, 0.92, band), 0.13);
+        vec2 s2 = starCell(d, 190.0, 0.972, 0.11);
+        vec2 s3 = starCell(d, 70.0, 0.99, 0.065);
+        col += starTint(s1.y)*(0.25 + s1.x)*step(0.001, s1.x)*1.3 + starTint(s2.y)*(0.3 + s2.x)*step(0.001, s2.x)*2.4 + starTint(s3.y)*(0.5 + s3.x)*step(0.001, s3.x)*6.0;
+        // glints on the brightest stars
+        // (no glow halo: a halo wide enough to see hits the 3D cell walls and looks square)
+        // a couple of faint distant galaxies
+        for (int i = 0; i < 2; i++) {
+          vec3 gd = normalize(vec3(sin(uSeed*3.1+float(i)*2.4), cos(uSeed*1.9+float(i)*1.3)*0.6, cos(uSeed*2.7+float(i)*3.7)));
+          vec3 t1 = normalize(cross(gd, vec3(0.0,1.0,0.0))), t2 = cross(gd, t1);
+          vec2 q = vec2(dot(d,t1), dot(d,t2)); float face = step(0.0, dot(d, gd));
+          float rot = uSeed + float(i); q = mat2(cos(rot),-sin(rot),sin(rot),cos(rot))*q; q.y *= 2.6;
+          col += vec3(0.75,0.7,0.85)*exp(-dot(q,q)*9000.0)*0.35*face + vec3(1.0,0.95,0.85)*exp(-dot(q,q)*60000.0)*0.5*face;
+        }
+        // keep the sky under the bloom threshold: a single bloomed star pixel smears into a visible square
+        col = min(col, vec3(0.72));
         gl_FragColor = vec4(col*uIntensity, 1.0);
       }`,
     side: THREE.BackSide, depthWrite: false, depthTest: true,

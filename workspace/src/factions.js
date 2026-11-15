@@ -56,6 +56,11 @@ export const UNIQUES = {
   lattice: { faction: 'hightech', name: 'Lumen Lattice', desc: 'Barrier capacity +35%, regeneration +25%.', price: 30000 },
   driftengine: { faction: 'frontier', name: 'Drift Engine', desc: 'Top speed +15%. Cruise can no longer be disrupted by nearby hostiles or interdiction.', price: 28000 },
   heart: { faction: 'artifact', name: 'Lumen Heart', desc: 'The seed crystal of the Lantern Fleet. Energy pool and recharge +35%, barrier +20%. One of a kind.', price: 0 },
+  p_capacitor: { faction: 'proto', name: 'Phase Capacitor', desc: 'Prototype. Beam damage +20%, energy recharge +20%.', price: 9000 },
+  p_hold: { faction: 'proto', name: 'Graviton Hold', desc: 'Prototype. Cargo capacity +30%.', price: 8000 },
+  p_afterburner: { faction: 'proto', name: 'Afterburner Coils', desc: 'Prototype. Top speed +10%, turning +20%.', price: 8500 },
+  p_warheads: { faction: 'proto', name: 'Seeker Warheads', desc: 'Prototype. Missile damage +40%, +2 missile capacity.', price: 9500 },
+  p_resonator: { faction: 'proto', name: 'Ore Resonator', desc: 'Prototype. Mining rate +20%, rare-find chance +6 points.', price: 7500 },
   ghost: { faction: 'pirate', name: 'Ghost Transponder', desc: 'Masks your signature. Pirate raid chance halved. Sold quietly at Frontier stations.', price: 22000 },
 };
 export const UNIQUE_BY_FACTION = Object.fromEntries(Object.entries(UNIQUES).map(([id, u]) => [u.faction, { id, ...u }]));
@@ -70,6 +75,11 @@ export function applyUniques(stats, uniques) {
     if (u === 'lattice') { s.shield = Math.round(s.shield * 1.35); s.shieldRegen *= 1.25; }
     if (u === 'driftengine') { s.speed *= 1.15; s.noInterdict = true; }
     if (u === 'ghost') s.ghost = true;
+    if (u === 'p_capacitor') { s.dps *= 1.2; s.energyRegen *= 1.2; }
+    if (u === 'p_hold') s.cargo = Math.round(s.cargo * 1.3);
+    if (u === 'p_afterburner') { s.speed *= 1.1; s.turn *= 1.2; }
+    if (u === 'p_warheads') { s.mslDmg = Math.round(s.mslDmg * 1.4); if (s.mslCap > 0) s.mslCap += 2; }
+    if (u === 'p_resonator') { s.mineRate *= 1.2; s.rare += 0.06; }
     if (u === 'heart') { s.energy = Math.round(s.energy * 1.35); s.energyRegen *= 1.35; s.shield = Math.round(s.shield * 1.2); }
   }
   return s;
