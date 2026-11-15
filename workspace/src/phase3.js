@@ -242,10 +242,10 @@ export class Phase3 {
     }).join('');
     const type = this.patron(sid), done = b.done[sid], P = this.patronHTML(type);
     const pat = done ? `<p class="ms-empty">${done}</p>` : `<p><b>${P[0]}</b></p><p>${P[1]}</p><p>${P[2].map(([a, arg, l]) => `<button class="sbtn${a === 'p3pass' ? '' : ' buy'}" data-act="${a}" data-arg="${arg}">${l}</button>`).join(' ')}</p>`;
-    return `<div class="bar"><div class="card news"><div><h3>🍸 The Cantina</h3><p><b>${name}</b>, behind the bar: ${greet}</p></div></div>
+    return `<div class="cantina"><div class="card news"><div><h3>🍸 The Cantina</h3><p><b>${name}</b>, behind the bar: ${greet}</p></div></div>
       <div class="ms-head"><span>RUMORS</span><small>New talk every day. The first one's free.</small></div><div class="card news"><div>${rum}</div></div>
       <div class="ms-head"><span>AT THE CORNER TABLE</span><small>One encounter per station per day</small></div><div class="card news"><div>${pat}</div></div>
-      ${this.headlinesHTML()}</div>`;
+      ${this.headlinesHTML() || '<div class="card news headlines"><div><h3>📰 Headlines</h3><p class="ms-empty">Nothing new. The sector hasn\'t heard of you yet.</p></div></div>'}</div>`;
   }
   act(act, arg) {
     const g = this.g, s = this.s, sid = s.systemId, b = this.barState(), fid = g.sysInfo.eco;
