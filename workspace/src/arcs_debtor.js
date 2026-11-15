@@ -165,7 +165,7 @@ export class DebtorArc {
       witness: '<p>The arrests start that night: customs chiefs, Patrol captains, a governor in a bathrobe. Hale nods at you across the briefing room.</p><p>"You did the right thing. Now keep your shields up. For the rest of your life."</p>',
       collector: "<p>You crack the ledger's last cipher yourself. Every debt in the Fringe scrolls past, and at the bottom, your own. You delete it.</p><p>Vex's final message: \"Well. Look who's the shark now.\"</p>",
     }[e];
-    g.ui.dialog(`<div class="arc-head">${this.m.pic(speaker)}<div><small>THE MARKER · EPILOGUE</small><div class="ov-title">${E.name.toUpperCase()}</div></div></div>${text}<p><i>${E.line}</i></p><p><b>${reward}</b><br>Title earned: <b>${E.title}</b></p>`,
+    g.ui.dialog(`<img class="ending-art" src="./endings/${e}.jpg" alt=""><div class="arc-head">${this.m.pic(speaker)}<div><small>THE MARKER · EPILOGUE</small><div class="ov-title">${E.name.toUpperCase()}</div></div></div>${text}<p><i>${E.line}</i></p><p><b>${reward}</b><br>Title earned: <b>${E.title}</b></p>`,
       [{ label: 'CONTINUE YOUR CAREER', primary: true }]);
     g.save();
   }

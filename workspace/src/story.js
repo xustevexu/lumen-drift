@@ -18,8 +18,10 @@ export const CAST = {
   vex: { name: 'Vex Tannery', role: 'Red Wake', color: '#ff4a3a', p: { bg: '#5a1d1d', skin: '#e0b48f', hair: '#c8331f', style: 'mohawk', outfit: '#2a2a33', trim: '#ff4a3a', acc: ['scar', 'earring'] } },
   ama: { name: 'Elder Ama Oyelaran', role: 'Free Settlers', color: '#f0703c', p: { bg: '#6b3a1e', skin: '#6b4430', hair: '#f0a03c', style: 'wrap', outfit: '#8a5a3a', trim: '#f0d36b', acc: [] } },
   solak: { name: 'Dr. Imre Solak', role: 'Lumen Institute', color: '#3fb8c8', p: { bg: '#174a52', skin: '#d8b896', hair: '#9aa0a8', style: 'short', outfit: '#f2f4f2', trim: '#3fb8c8', acc: ['glasses'] } },
-  marrow: { name: 'Silas Marrow', role: 'Red Wake', color: '#c8a03a', noArt: true, p: { bg: '#2a1414', skin: '#d8b090', hair: '#8a8a8a', style: 'short', outfit: '#141418', trim: '#c8a03a', acc: ['beard', 'scar'] } },
-  mercer: { name: 'Capt. Doran Mercer', role: 'Accord Patrol', color: '#6f9fff', noArt: true, p: { bg: '#1e2c50', skin: '#e0b896', hair: '#b8b0a0', style: 'short', outfit: '#1c2848', trim: '#c0c8d8', acc: [] } },
+  marrow: { name: 'Silas Marrow', role: 'Red Wake', color: '#c8a03a', p: { bg: '#2a1414', skin: '#d8b090', hair: '#8a8a8a', style: 'short', outfit: '#141418', trim: '#c8a03a', acc: ['beard', 'scar'] } },
+  mercer: { name: 'Capt. Doran Mercer', role: 'Accord Patrol', color: '#6f9fff', p: { bg: '#1e2c50', skin: '#e0b896', hair: '#b8b0a0', style: 'short', outfit: '#1c2848', trim: '#c0c8d8', acc: [] } },
+  varga: { name: 'Capt. Ilse Varga', role: 'Lantern Fleet', color: '#58c8e8', p: { kind: 'ai' } },
+  unmarked: { name: 'Unmarked Pilot', role: 'No transponder', color: '#3a4a6a', p: { kind: 'ai' } },
   kask: { name: 'Brodie Kask', role: 'Deepcore Union', color: '#d9a35a', p: { bg: '#4a3a22', skin: '#b98a66', hair: '#5a4632', style: 'bald', outfit: '#6a5a44', trim: '#d9a35a', acc: ['beard'] } },
 };
 

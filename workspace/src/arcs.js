@@ -99,6 +99,7 @@ export class ArcManager {
       this.setGoal(`Meet Vex Tannery at any Fringe station (nearest: ${this.sysName(t)}).`, t);
     } else if (a.ch === 5) {
       this.comm('hale', "We've seen what Solak decoded. I'm not happy with how I found out, but I won't protect Mercer. Bring me the evidence and you come home.", 'info');
+      setTimeout(() => this.comm('mercer', "I hear you've been asking about me, pilot. Let's be adults about this. Everyone has a price. Name yours before you do something you can't take back.", 'warn'), 2000);
       setTimeout(() => this.comm('ama', "The Accord will bury this. Give it to us and every Fringe colony will know who sold them to the Wake. Your choice, pilot. Choose with your heart."), 900);
       this.setGoal('Everyone wants the evidence. Dock at any station to decide where it goes. This choice is permanent.', null);
     }
@@ -109,7 +110,7 @@ export class ArcManager {
     if (this.origin === 'debtor') { this.debtor.onEnterSystem(initial); return; }
     if (this.origin === 'heir') { this.heir.onEnterSystem(initial); return; }
     if (this.origin !== 'deserter') return;
-    if (a.ch === 3 && a.stage === 'go') { a.flags.spawned = false; if (!initial && a.flags.armed) setTimeout(() => this.spawnSquad({ n: 3, name: 'Unmarked', tough: 1.15, color: 0x6f9fff, toast: '⚠ Three unmarked ships dropped out of warp. They are here for you.', speaker: 'wick', line: 'No transponders, but those are Accord-pattern drives. Patrol hardware flying as pirates. Take them down and we can pull their logs.' }), 2500); }
+    if (a.ch === 3 && a.stage === 'go') { a.flags.spawned = false; if (!initial && a.flags.armed) setTimeout(() => this.spawnSquad({ n: 3, name: 'Unmarked', tough: 1.15, color: 0x6f9fff, toast: '⚠ Three unmarked ships dropped out of warp. They are here for you.', taunt: ['unmarked', 'Transmit the cipher key and power down. Nobody needs to find your wreck.'], speaker: 'wick', line: 'No transponders, but those are Accord-pattern drives. Patrol hardware flying as pirates. Take them down and we can pull their logs.' }), 2500); }
   }
   spawnSquad(o) {
     const g = this.g, a = this.arc; if (!a || !a.flags.armed || a.flags.spawned || g.docked) return;
@@ -118,6 +119,7 @@ export class ArcManager {
     const rank = pilotRank(this.state);
     g.spawnOutlaws({ n: o.n, entry: p.pos.clone().add(dir), name: o.name, tough: o.tough + rank * 0.08, burstColor: o.color, toast: o.toast });
     for (const x of g.outlaws) if (x.name.startsWith(o.name)) x.storyOf = 'arc';
+    if (o.taunt) setTimeout(() => this.comm(o.taunt[0], o.taunt[1], 'warn'), 600);
     setTimeout(() => this.comm(o.speaker, o.line, 'warn'), 1200);
   }
   completeCh3() {
@@ -182,7 +184,7 @@ export class ArcManager {
     g.ui.dialog(this.scene('hale', 'The Hearing', `<p>Your comm lights up with three channels at once.</p>
       <p><b>Hale:</b> "Bring it to me. Mercer goes to trial, you get a pardon and a license. The Accord gets better from the inside."</p>
       <p><b>Ama:</b> "Bring it to us. The Fringe deserves to know, and to stop asking the Accord for protection."</p>
-      <p><b>An unknown channel:</b> "This is Mercer. ◈30,000 says you lose that data. Think about it."</p>
+      <p><b>Mercer:</b> " ◈30,000 says you lose that data. Think about it."</p>
       <p>Or you could broadcast everything to the whole sector and let the chips fall.</p>
       <p><b style="color:#b0451a">Whatever you choose is permanent.</b></p>`),
     [
@@ -215,7 +217,7 @@ export class ArcManager {
   }
   epilogue() {
     const g = this.g, s = this.state, a = this.arc, end = a.ending, E = ENDINGS[end];
-    const speaker = { accord: 'hale', fringe: 'ama', open: 'kask', bought: 'vex' }[end];
+    const speaker = { accord: 'hale', fringe: 'ama', open: 'kask', bought: 'mercer' }[end];
     let reward = '';
     if (end === 'accord') {
       s.accord.licensed = true; for (const f of ACCORD) s.factions[f] = Math.max(s.factions[f] || 0, 25); g.factionChange('frontier', -10); g.addCredits(15000);
@@ -235,9 +237,9 @@ export class ArcManager {
       accord: '<p>Mercer is led out of the Patrol office in restraints. Hale hands you a license, and an old Patrol pin.</p><p>"You should have come to me first. But you came. Welcome home, Commander."</p>',
       fringe: "<p>The whole station turns out. Someone's playing music; someone's crying. Ama presses a woven band into your hand.</p><p>\"Out here you're family now. The Accord can keep its licenses.\"</p>",
       open: `<p>Kask flips the switch and the evidence goes out on every relay in the lanes. Within the hour the news feeds catch fire.</p><p>"Well," Kask says, "you've upset everybody equally. That's the closest thing to justice we get out here."</p>`,
-      bought: '<p>The credits arrive. The evidence goes into a star. Later, Vex sends you one line:</p><p>"Welcome to the real Fringe, pilot."</p>',
+      bought: '<p>The credits arrive. The evidence goes into a star. Later, Mercer sends you one line:</p><p>"Pleasure doing business. Welcome to the real world, pilot."</p>',
     }[end];
-    g.ui.dialog(`<div class="arc-head">${this.pic(speaker)}<div><small>THE CIPHER KEY · EPILOGUE</small><div class="ov-title">${E.name.toUpperCase()}</div></div></div>${text}<p><i>${E.line}</i></p><p><b>${reward}</b><br>Title earned: <b>${E.title}</b></p>`,
+    g.ui.dialog(`<img class="ending-art" src="./endings/${end}.jpg" alt=""><div class="arc-head">${this.pic(speaker)}<div><small>THE CIPHER KEY · EPILOGUE</small><div class="ov-title">${E.name.toUpperCase()}</div></div></div>${text}<p><i>${E.line}</i></p><p><b>${reward}</b><br>Title earned: <b>${E.title}</b></p>`,
       [{ label: 'CONTINUE YOUR CAREER', primary: true }]);
     g.save();
   }

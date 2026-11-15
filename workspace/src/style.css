@@ -426,3 +426,5 @@ body.gamepad:has(.overlay:not(.hidden)) #hud [data-pad]::after { display: none; 
 .arc-head small { font: 900 10.5px var(--font); letter-spacing: 1px; opacity: .65; }
 .card.story { border-color: #6b4fa0; background: #f3ecfa; }
 body:has(#dialog:not(.hidden)) #comm { display: none; }
+#dialogBox:has(.ending-art) { width: min(660px, 95vw); }
+.ending-art { display: block; width: calc(100% + 32px); margin: -16px -16px 2px; max-height: 40vh; object-fit: cover; border-bottom: 3px solid var(--ink); }

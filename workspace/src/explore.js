@@ -286,7 +286,7 @@ export class ExploreManager {
   }
   showLog(idx, footer) {
     const L = LORE[idx];
-    this.g.ui.dialog(`<div class="ov-title">📜 EXODUS LOG ${idx + 1}/${LORE.length}</div><p><b>${L.title}</b></p><p style="font-style:italic">${L.text}</p><p><small>${footer}</small></p>`, [{ label: 'CONTINUE', primary: true }]);
+    this.g.ui.dialog(`<div class="arc-head"><img src="./portraits/varga.jpg" alt=""><div><small>CAPT. ILSE VARGA · HALCYON</small><div class="ov-title">📜 EXODUS LOG ${idx + 1}/${LORE.length}</div></div></div><p><b>${L.title}</b></p><p style="font-style:italic">${L.text}</p><p><small>${footer}</small></p>`, [{ label: 'CONTINUE', primary: true }]);
   }
   checkUnlock() {
     const g = this.g, ex = this.ex;

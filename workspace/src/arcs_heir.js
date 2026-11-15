@@ -154,7 +154,7 @@ export class HeirArc {
   }
   epilogue() {
     const g = this.g, s = this.s, a = this.a, e = a.ending, E = HEIR_ENDINGS[e];
-    const speaker = { keep: 'wick', settlers: 'ama', institute: 'solak', rest: 'ama' }[e];
+    const speaker = { keep: 'varga', settlers: 'ama', institute: 'solak', rest: 'varga' }[e];
     let reward;
     if (e === 'keep') { g.addCredits(10000); reward = "Fuel 85% cheaper everywhere · +◈10,000 from Varga's private vault"; }
     else if (e === 'settlers') { this.removeHeart(); g.factionChange('frontier', 30); g.factionChange('mining', 15); g.factionChange('hightech', -10, true); g.addCredits(10000); reward = 'Settlers +30 · Deepcore +15 · Fringe fuel half price · +◈10,000'; }
@@ -167,7 +167,7 @@ export class HeirArc {
       institute: '<p>The paperwork is, as promised, extensive. Solak signs the last page with a flourish and immediately starts taking notes on the Heart.</p><p>"History will remember this, pilot. Possibly fondly."</p>',
       rest: "<p>You set the Heart back in its cradle aboard the Halcyon Ark. All through the system the crystal fields brighten, one after another, like a city switching on its lights.</p><p>Across every channel in the sector, for one long moment, you can hear them singing.</p>",
     }[e];
-    g.ui.dialog(`<div class="arc-head">${this.m.pic(speaker)}<div><small>THE LANTERN SONG · EPILOGUE</small><div class="ov-title">${E.name.toUpperCase()}</div></div></div>${text}<p><i>${E.line}</i></p><p><b>${reward}</b><br>Title earned: <b>${E.title}</b></p>`,
+    g.ui.dialog(`<img class="ending-art" src="./endings/${e}.jpg" alt=""><div class="arc-head">${this.m.pic(speaker)}<div><small>THE LANTERN SONG · EPILOGUE</small><div class="ov-title">${E.name.toUpperCase()}</div></div></div>${text}<p><i>${E.line}</i></p><p><b>${reward}</b><br>Title earned: <b>${E.title}</b></p>`,
       [{ label: 'CONTINUE YOUR CAREER', primary: true }]);
     g.save();
   }
