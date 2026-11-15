@@ -200,7 +200,7 @@ export class Story {
     const ui = this.g.ui;
     const cards = ORIGIN_IDS.map((id) => { const o = ORIGINS[id]; return `<div class="origin"><div class="origin-pic"><img src="./portraits/${id}.jpg" alt="${o.name}"></div><div><b>${o.name}</b> <small>${o.tag}</small><p>${o.blurb}</p><p class="origin-perks">${o.perks}</p></div></div>`; }).join('');
     ui.dialog(`<div class="ov-title">WHO ARE YOU?</div><p>Your past decides where you start, who already knows your name, and the story that follows you.</p>${cards}`,
-      [...ORIGIN_IDS.map((id) => ({ label: ORIGINS[id].name.toUpperCase(), primary: id === 'heir', fn: () => this.intro(id, onPick) })), { label: 'BACK' }]);
+      [...ORIGIN_IDS.map((id) => ({ label: ORIGINS[id].name.toUpperCase(), fn: () => this.intro(id, onPick) })), { label: 'BACK' }]);
     document.getElementById('dialogBox').classList.add('originBox');
   }
   intro(id, onPick) {
