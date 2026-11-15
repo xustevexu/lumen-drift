@@ -20,7 +20,8 @@ export const CAST = {
   kask: { name: 'Brodie Kask', role: 'Deepcore Union', color: '#d9a35a', p: { bg: '#4a3a22', skin: '#b98a66', hair: '#5a4632', style: 'bald', outfit: '#6a5a44', trim: '#d9a35a', acc: ['beard'] } },
 };
 
-export function portraitSVG(id, size = 56) {
+export function portraitSVG(id, size = 64) {
+  if (CAST[id]) return `<img class="portrait" src="./portraits/${id}.jpg" width="${size}" height="${size}" alt="${CAST[id].name}">`;
   const c = CAST[id]; const p = c.p;
   if (p.kind === 'ai') {
     return `<svg viewBox="0 0 64 64" width="${size}" height="${size}"><rect width="64" height="64" fill="#0d1424"/><circle cx="32" cy="32" r="22" fill="none" stroke="#58e8ff" stroke-width="2" opacity=".5"/>
