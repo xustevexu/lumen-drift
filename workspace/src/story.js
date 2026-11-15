@@ -23,7 +23,7 @@ export const CAST = {
   mercer: { name: 'Capt. Doran Mercer', role: 'Accord Patrol', color: '#6f9fff', p: { bg: '#1e2c50', skin: '#e0b896', hair: '#b8b0a0', style: 'short', outfit: '#1c2848', trim: '#c0c8d8', acc: [] } },
   varga: { name: 'Capt. Ilse Varga', role: 'Lantern Fleet', color: '#58c8e8', p: { kind: 'ai' } },
   unmarked: { name: 'Unmarked Pilot', role: 'No transponder', color: '#3a4a6a', p: { kind: 'ai' } },
-  rival: { name: 'Kade Rourke', role: 'Rival Ace', color: '#ff8a3a', noArt: true, p: { bg: '#4a2a14', skin: '#d9a87e', hair: '#2a1a10', style: 'short', outfit: '#e8e2d4', trim: '#ff8a3a', acc: ['earring'] } },
+  rival: { name: 'Kade Rourke', role: 'Rival Ace', color: '#ff8a3a', p: { bg: '#4a2a14', skin: '#d9a87e', hair: '#2a1a10', style: 'short', outfit: '#e8e2d4', trim: '#ff8a3a', acc: ['earring'] } },
   kask: { name: 'Brodie Kask', role: 'Deepcore Union', color: '#d9a35a', p: { bg: '#4a3a22', skin: '#b98a66', hair: '#5a4632', style: 'bald', outfit: '#6a5a44', trim: '#d9a35a', acc: ['beard'] } },
 };
 
