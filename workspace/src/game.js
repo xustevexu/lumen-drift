@@ -16,6 +16,7 @@ import { UI } from './ui.js';
 import { GamepadInput } from './gamepad.js';
 import * as OM from './outpostModels.js';
 import { OutpostManager, normalizeOutpostState } from './outposts.js';
+import { SiegeManager, normalizeSiegeState } from './siege.js';
 import { SectorEvents, normalizeEventState } from './events.js';
 import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
 import { RNG, clamp, damp, fmt } from './rng.js';
@@ -55,6 +56,7 @@ export class Game {
     this.world = new World(this);
     this.events = new SectorEvents(this);
     this.outposts = new OutpostManager(this);
+    this.siege = new SiegeManager(this);
     window.addEventListener('resize', () => this.resize());
     this.resize();
 
@@ -65,7 +67,7 @@ export class Game {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveOnLeave(); });
     window.addEventListener('pagehide', saveOnLeave);
     this.state = saved || newState(params.get('seed') ? Number(params.get('seed')) : Math.floor(Math.random() * 1e9));
-    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state);
+    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state); normalizeSiegeState(this.state);
     this.hasSave = !!saved;
     this.applyQuality(this.state.quality);
 
@@ -146,7 +148,7 @@ export class Game {
     if (fresh) {
       clearAuto();
       const seed = Math.floor(Math.random() * 1e9);
-      this.state = normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed)))));
+      this.state = normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed))))));
       this.galaxy = generateGalaxy(seed);
       this.economy = new Economy(this.galaxy, this.state);
       this.state.systemId = this.galaxy.startId;
@@ -233,6 +235,7 @@ export class Game {
     this.rollOutlaws();
     this.events.onEnterSystem();
     this.outposts.onEnterSystem();
+    this.siege.onEnterSystem();
     if (!initial) this.ui.toast(`${sys.name} · ${ECONOMIES[sys.eco].name} system`, 'info', 3.5);
     this.ui.onSystemChanged();
   }
@@ -337,7 +340,7 @@ export class Game {
       };
       const tpl = opts.faction ? buildShipTemplate('kestrel', 'player') : this.outlawTpl || buildShipTemplate('kestrel', 'outlaw');
       const o = new Ship(this, { kind: 'outlaw', hullId: 'kestrel', palette: 'outlaw', tpl, stats, name: n > 1 ? `${base} ${['α', 'β', 'γ', 'δ'][i]}` : base });
-      o.faction = opts.faction || null; o.raidOf = opts.raidOf || null;
+      o.faction = opts.faction || null; o.raidOf = opts.raidOf || null; o.siegeOf = opts.siegeOf || null;
       o.pos.copy(entry).add(_v.set((Math.random() - 0.5) * 140, (Math.random() - 0.5) * 50, (Math.random() - 0.5) * 140));
       _v.subVectors(this.player.pos, o.pos); o.yaw = Math.atan2(_v.x, _v.z);
       o.throttle = 1; o.state = 'hunt'; o.missiles = stats.mslCap; o.mslCd = 6 + Math.random() * 6; o.retarget = 0; o.orbitDir = Math.random() < 0.5 ? 1 : -1;
@@ -362,6 +365,8 @@ export class Game {
     }
     if (this.state.dayTime >= roll.at && !this.docked) {
       roll.spawned = true;
+      const SA = this.state.siege.active; // the armada owns this system today: no ordinary raid on top of it
+      if (SA && SA.phase !== 'done' && SA.target.sys === this.state.systemId && SA.day === this.state.day) return;
       if (roll.enforcer) {
         const F = FACTIONS[roll.enforcer], rank = pilotRank(this.state);
         this.spawnOutlaws({ n: 1 + Math.min(2, Math.floor(rank / 2)) + (factionTier(standingWith(this.state, roll.enforcer)).level <= -2 ? 1 : 0), name: `${F.short} Enforcer`, faction: roll.enforcer, tough: 1.15,
@@ -389,7 +394,7 @@ export class Game {
       if (o.dead) { this.outlaws.splice(i, 1); continue; }
       if (o.static) { this.updateTurret(o, dt); continue; }
       o.retarget -= dt;
-      if (o.state !== 'flee' && (o.retarget <= 0 || !o.tgt || o.tgt.dead)) { o.tgt = o.raidOf ? (this.outposts.raidTarget(o) || (this.docked ? null : this.player)) : o.faction ? (this.docked ? null : this.player) : this.pickOutlawTarget(o); o.retarget = 4; }
+      if (o.state !== 'flee' && (o.retarget <= 0 || !o.tgt || o.tgt.dead)) { o.tgt = o.siegeOf ? (this.siege.target(o) || (this.docked ? null : this.player)) : o.raidOf ? (this.outposts.raidTarget(o) || (this.docked ? null : this.player)) : o.faction ? (this.docked ? null : this.player) : this.pickOutlawTarget(o); o.retarget = 4; }
       // retaliate against whoever is shooting at us
       if (o.state !== 'flee' && o.lastAttacker && !o.lastAttacker.dead && this.time - o.lastHit < 10 && !(o.lastAttacker === this.player && this.docked)) o.tgt = o.lastAttacker;
       if (o.hp < o.maxHp * 0.22 && o.state !== 'flee') { o.state = 'flee'; this.ui.toast(`${o.name} is breaking off!`, 'info', 2.5); }
@@ -484,9 +489,11 @@ export class Game {
   }
 
   destroyShip(ship, attacker) {
+    if (ship.isSiegeProxy) { ship.remove(); this.siege.onProxyDestroyed(); return; }
     if (ship.isOutpost) { ship.remove(); this.outposts.onProxyDestroyed(ship); return; }
     if (ship.isBase) { if (ship.beam) ship.beam.visible = false; if (this.target === ship) this.target = null; ship.remove(); this.events.onBaseDestroyed(ship, attacker); return; }
     if (ship.guardOf) this.events.onGuardDown(ship);
+    if (ship.siegeOf) this.siege.onShipDown(ship, attacker);
     this.fx.explosion(ship.pos.clone(), ship.radius / 6, ship.kind === 'outlaw' ? 0xff7a40 : 0xffb060);
     // drop cargo in crates
     const entries = Object.entries(ship.cargo).filter(([, q]) => q > 0);
@@ -627,7 +634,7 @@ export class Game {
   save() {
     if (this.player && this.player.dead) return false;
     this.syncShipRec();
-    this.events.persist(); this.outposts.persist();
+    this.events.persist(); this.outposts.persist(); this.siege.persist();
     if (this.player) { this.state.pos = this.player.pos.toArray().map((x) => Math.round(x)); this.state.yaw = this.player.yaw; }
     this.state.savedAt = Date.now();
     const ok = writeAuto(this.state);
@@ -638,7 +645,7 @@ export class Game {
 
   // Replace the whole career with a loaded save (slot, autosave or imported file).
   loadGame(state) {
-    this.state = normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(state))));
+    this.state = normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(state)))));
     this.galaxy = generateGalaxy(state.seed);
     this.economy = new Economy(this.galaxy, state);
     if (state.systemId == null) state.systemId = this.galaxy.startId;
@@ -1086,6 +1093,7 @@ export class Game {
     this.rollOutlaws();
     this.events.newDay();
     this.outposts.newDay(this.state.day);
+    this.siege.newDay(this.state.day);
     this.ui.toast(`Day ${this.state.day} — markets updated`, 'info', 2.5);
     this.checkDeadlines();
   }
@@ -1138,6 +1146,7 @@ export class Game {
     this.events.updateAssist(dt, act);
     this.events.update(dt);
     this.outposts.update(dt);
+    this.siege.update(dt);
     // battle music when outlaws are close
     const near = this.hostilesNear(1600);
     this.audio.setMusic(near ? 'battle' : 'calm');

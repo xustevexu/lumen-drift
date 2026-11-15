@@ -5,6 +5,7 @@ import { pilotRank, netWorth, RANK_NAMES } from './economy.js';
 import { SLOT_COUNT, autoInfo, readSlot, writeSlot, summarize, exportText, exportName, parseImport, ago } from './save.js';
 import { liveEvents, describe, eventIcon } from './events.js';
 import { CHARTER_PRICE, maxOutposts, storageUsed, storageCap, builtMods } from './outposts.js';
+import { MILITIA_PRICE, MILITIA_MAX } from './siege.js';
 import { FACTIONS, FACTION_ORDER, UNIQUES, UNIQUE_BY_FACTION, factionTier, nextFactionTier, standingWith, tierPerks, uniqueSlots } from './factions.js';
 import { MAX_ACTIVE, offersFor, missionSpace, boundToShip, typeTag, modTags, destText, needText, dueText, reqMet, reqText, standingOf, standingTier, nextStanding } from './missions.js';
 
@@ -214,10 +215,10 @@ export class UI {
     if (!el) {
       el = document.createElement('div'); el.id = 'raidBanner'; el.className = 'hidden';
       el.innerHTML = '<span></span><button>SET COURSE</button>';
-      el.querySelector('button').addEventListener('click', () => { const u = this.g.outposts.urgent(); if (u) this.g.outposts.courseTo(u.o); });
+      el.querySelector('button').addEventListener('click', () => { if (this.g.siege.urgent()) { this.g.siege.courseTo(); return; } const u = this.g.outposts.urgent(); if (u) this.g.outposts.courseTo(u.o); });
       $('topStack').insertBefore(el, $('toasts'));
     }
-    const u = this.g.outposts.urgent();
+    const u = this.g.siege.urgent() || this.g.outposts.urgent();
     el.classList.toggle('hidden', !u);
     if (u && el.firstChild.textContent !== u.text) el.firstChild.textContent = u.text;
   }
@@ -289,6 +290,7 @@ export class UI {
     W.fields.forEach((f, i) => { if (f.surge || f.center.distanceTo(p.pos) > f.radius) list.push({ key: `field${i}`, pos: f.center, cls: f.surge ? 'field surge' : 'field', name: f.surge ? `✦ LUMENITE SURGE · ${f.name}` : `${f.name} · ${COMM[f.primary].name}`, edge: !!f.surge }); });
     for (const m of g.events.markers()) list.push({ ...m, cls: 'event' + (m.ship === g.target ? ' target' : '') });
     for (const m of g.outposts.markers()) list.push(m);
+    for (const a of g.siege.allies) if (!a.dead && a.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${a.uid}`, pos: a.pos, cls: 'ally', name: a.name });
     W.deposits.forEach((d, i) => { if (d.pos.distanceTo(p.pos) < 5000 && d.amount > 0) list.push({ key: `dep${i}`, pos: d.pos, cls: 'deposit', name: `◆ ${COMM[d.ore].name} deposit` }); });
     W.derelicts.forEach((d, i) => { if (!d.occupied && d.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `der${i}`, pos: d.pos, cls: 'derelict', name: d.name }); });
     for (const t of g.traders) if (!t.dead && !(t.disabled && t.eventId) && t.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${t.uid}`, pos: t.pos, cls: 'trader' + (t === g.target ? ' target' : ''), name: t.name, edge: t === g.target });
@@ -597,6 +599,12 @@ export class UI {
   }
 
   repairCost() { const p = this.g.player; return Math.ceil(Math.ceil(p.maxHp - p.hp) * 1.5 * HULLS[p.hullId].priceMul * (1 + factionTier(standingWith(this.g.state, this.g.sysInfo.eco)).repair)); }
+  siegeHTML() {
+    const g = this.g, A = g.state.siege.active; if (!A || A.phase === 'done') return '';
+    const here = A.target.type === 'station' && A.target.sys === g.state.systemId;
+    const hire = here && A.phase === 'announced' ? `<p>Militia hired: <b>${A.funded}/${MILITIA_MAX}</b> · defenders on the day: <b>${g.siege.defenders()}</b> (station garrison 2 + militia + faction standing) <button class="sbtn buy" data-act="militia" ${A.funded < MILITIA_MAX && g.state.credits >= MILITIA_PRICE ? '' : 'disabled'}>HIRE MILITIA · ◈ ${fmt(MILITIA_PRICE)}</button></p>` : '';
+    return `<div class="card news siege"><div><h3>⚔ Siege Warning</h3><p>${g.siege.newsLine()}</p>${hire}<p><small>Be in the system when the armada arrives to fight alongside the defenders: break all ${A.waves.length} waves for a ◈${fmt(g.siege.reward())} faction reward plus the Dreadnought's loot. Stay away and it's decided by the odds above.</small></p>${!here ? '<button class="sbtn" data-act="siegecourse">SET COURSE</button>' : ''}</div></div>`;
+  }
   newsHTML() {
     const g = this.g, s = g.state, evs = liveEvents(s);
     if (!evs.length) return '<div class="card news"><div><h3>Sector News</h3><p>Quiet across the sector today.</p></div></div>';
@@ -633,6 +641,7 @@ export class UI {
     return `<div class="svc">
       <div class="card"><div><h3>Hull Repair</h3><p>${missing > 0 ? `${missing} damage to patch` : 'Hull is pristine'}</p></div><button class="sbtn buy" data-act="repair" ${missing > 0 && s.credits >= repair ? '' : 'disabled'}>◈ ${fmt(repair)}</button></div>
       <div class="card"><div><h3>Missile Restock</h3><p>${p.stats.mslCap ? `${p.missiles}/${p.stats.mslCap} loaded · ◈60 each` : 'No missile rack installed'}</p></div><button class="sbtn buy" data-act="missiles" ${mslNeed > 0 && s.credits >= mslCost ? '' : 'disabled'}>◈ ${fmt(mslCost)}</button></div>
+      ${this.siegeHTML()}
       ${this.newsHTML()}
       ${this.outpostsHTML()}
       ${this.factionsHTML()}
@@ -692,6 +701,9 @@ export class UI {
       while (q > 0 && E.quoteBuy(sid, arg, q) > s.credits) q--;
       if (q > 0) { const cost = E.buy(sid, arg, q); s.credits -= cost; p.cargo[arg] = (p.cargo[arg] || 0) + q; s.stats.trades++; g.audio.play('click', { vol: 0.6 }); }
       else this.toast('Not enough credits or cargo space', 'warn', 2);
+    } else if (act === 'militia') {
+      if (g.siege.hire()) { g.audio.play('coins', { vol: 0.7 }); this.toast('Militia pilot hired for the siege', 'good', 2.5); }
+    } else if (act === 'siegecourse') { g.siege.courseTo(); return;
     } else if (act === 'charter') {
       if (s.credits >= CHARTER_PRICE && s.outposts.length + s.charters < maxOutposts(s)) { s.credits -= CHARTER_PRICE; s.charters++; g.audio.play('coins', { vol: 0.8 }); this.toast('Outpost Charter purchased: find a site and press ESTABLISH OUTPOST', 'good', 4); }
     } else if (act === 'opcourse') {
@@ -1008,6 +1020,13 @@ export class UI {
         labels.push({ x: ex, y: ey, gap: 0, lines: [], pri: 0, blocks: [{ x: ex - 8, y: ey - 8, w: 16, h: 16 }] });
       });
     }
+    // siege target: ⚔ to the right of the system
+    const SA = g.state.siege.active;
+    if (SA && SA.phase !== 'done') {
+      const [x, y] = P(S[SA.target.sys]); const ex = x + 18, ey = y + 14;
+      ctx.font = '900 16px system-ui, sans-serif'; ctx.lineWidth = 3; ctx.strokeStyle = '#141826'; ctx.strokeText('⚔', ex, ey); ctx.fillStyle = '#ff4a3a'; ctx.fillText('⚔', ex, ey);
+      labels.push({ x: ex, y: ey, gap: 0, lines: [], pri: 0, blocks: [{ x: ex - 9, y: ey - 9, w: 18, h: 18 }] });
+    }
     // outposts: ⌂ above-left of the system (red while a raid is incoming)
     ctx.font = '900 15px system-ui, sans-serif';
     for (const o of g.state.outposts) {
@@ -1082,7 +1101,8 @@ export class UI {
       const ms = there.length ? `<p style="color:#9a6a00"><b>★ Contracts here:</b> ${there.map((m) => `${m.title} → ${m.dest.name} (due Day ${m.deadline})`).join('; ')}</p>` : '';
       const evs = liveEvents(g.state).filter((e) => e.sys === s.id).map((e) => { const d = describe(e, g.galaxy, g.state, g.player.stats.sensorLvl); return `<p><b style="color:${d.col}">${d.ch}</b> <b>${d.title}:</b> ${d.line}</p>`; }).join('');
       const ft = factionTier(standingWith(g.state, s.eco));
-      box.innerHTML = `<h4>${s.name}</h4><p>${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * 100)}%/day</p><p><b style="color:${FACTIONS[s.eco].color}">${FACTIONS[s.eco].name}</b> · you are <b>${ft.name}</b>${ft.level <= -1 ? ' <span style="color:#ff6b4a">(enforcers may hunt you)</span>' : ''}</p>${evs}${ms}${rows}${btn}`;
+      const SA = g.state.siege.active, siegeTxt = SA && SA.phase !== 'done' && SA.target.sys === s.id ? `<p style="color:#b0451a"><b>⚔ Siege:</b> ${g.siege.newsLine()}</p>` : '';
+      box.innerHTML = `<h4>${s.name}</h4><p>${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * 100)}%/day</p><p><b style="color:${FACTIONS[s.eco].color}">${FACTIONS[s.eco].name}</b> · you are <b>${ft.name}</b>${ft.level <= -1 ? ' <span style="color:#ff6b4a">(enforcers may hunt you)</span>' : ''}</p>${siegeTxt}${evs}${ms}${rows}${btn}`;
     }
   }
   mapAction(act) {

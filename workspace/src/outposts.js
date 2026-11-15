@@ -290,6 +290,11 @@ export class OutpostManager {
   onProxyDestroyed(proxy) {
     const o = this.find(proxy.outpostId); if (!o) return;
     this.g.fx.explosion(proxy.pos.clone(), 3, 0xffa050);
+    if (this.g.siege && this.g.siege.isTargetOutpost(o.id)) { // the armada, not a regular raid
+      const rr0 = this.rt.get(o.id); if (rr0) rr0.proxy = null; o.hp = 1;
+      this.g.siege.defeat('The armada broke through the outpost barrier.');
+      setTimeout(() => this.rebuild(o), 3000); return;
+    }
     this.raidLost(o, 'The raiders broke through the barrier.');
     for (const x of this.g.outlaws) if (x.raidOf === o.id) x.state = 'flee';
     o.hp = 1;

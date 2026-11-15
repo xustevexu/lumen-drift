@@ -133,6 +133,14 @@ Modules per ship (independent levels 0–3): Engine, Cargo Pod, Barrier, Beam, M
 - HUD raid banner with countdown + SET COURSE; ⌂ markers in flight, on the system chart and galaxy chart.
 - Debug: `?gallery=1` lays out every model; `?outpostraid=1` forces a raid on the next day roll.
 
+## 12g. Pirate sieges (src/siege.js)
+- Scheduled: first possible around day 6; announced 3 days ahead (`state.siege.active`), next one 6–10 days after the siege day (~every 12–13 days in tests). Target: a station within 3 jumps of the player, or (35% when you have one) an outpost with 3+ modules.
+- Armada arrives at 0.4 of the siege day: 3 waves (2–6 raiders each by rank, slightly tougher per wave), the last with a Dreadnought flagship (outlaw model ×2.6, hull 1500+420×rank). No ordinary outlaw raid in that system that day.
+- Defenders: station garrison 2 + hired militia (◈2,500 each, max 4, Services tab at the target station) + local faction tier level (Friendly 1 … Allied 3). Allies are Ships of kind 'ally' with their own AI; station barrier is a proxy Ship (hull 2600+500×rank, shield 1400+250×rank). Outpost targets use the outpost's own proxy and turrets.
+- In system at arrival → live waves; win = all waves cleared: faction pays 3000+1500×rank, faction +8, Red Wake −10; the Dreadnought drops credits, Lumenite, Luxury and a free module level when you kill it. Lose = barrier destroyed (outpost: storage + credits wiped and one module destroyed).
+- Absent → auto-resolve p = def/(def+att), def = 40 + 28×defenders (outpost: 15 + 35×turrets + 25×militia), att = total raiders×(18+5×rank) + 120 + 40×rank. Docked in-system → waits until you undock. Leaving mid-battle → auto-resolve; reload → restarts from the current wave.
+- HUD banner countdown on the day + SET COURSE; ⚔ on the galaxy chart; Siege Warning card in Services.
+
 ## 13. Completion criteria
 - Start screen loads, START enters flight.
 - Player can steer, throttle, mine an asteroid (cargo increases), dock, sell ores (credits increase), buy goods, jump to another system, sell goods there.

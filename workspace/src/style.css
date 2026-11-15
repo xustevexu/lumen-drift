@@ -372,3 +372,5 @@ body.gamepad:has(.overlay:not(.hidden)) #hud [data-pad]::after { display: none; 
 #raidBanner { display: flex; align-items: center; gap: 8px; justify-content: space-between; background: #ff6b4a; color: #fff; border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 6px 8px; font: 900 13px var(--display); margin-bottom: 6px; pointer-events: auto; }
 #raidBanner.hidden { display: none; }
 #raidBanner button { font: 800 11px var(--font); border: 2px solid var(--ink); background: var(--paper); padding: 4px 8px; cursor: pointer; }
+.mk.ally { color: #7bc86c; }
+.card.news.siege { background: #ffe1d6; }
