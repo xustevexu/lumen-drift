@@ -239,6 +239,8 @@ export class GamepadInput {
     } else if (ctx === 'pause') {
       if (S.hit(B.B) || S.hit(B.START)) this.ui.togglePause();
     } else if (ctx === 'dialog') {
+      // right stick scrolls the message log, or any dialog taller than the screen
+      if (S.ry) { const box = $('dialogBox'), sc = box.querySelector('.msglog') || box; sc.scrollTop += S.ry * 700 * S.dt; }
       if (S.hit(B.B)) {
         const op = this.g.outposts && this.g.outposts.panel;
         if (op) { if (op.view === 'choose') this.g.outposts.panelAction('back'); else this.g.outposts.closePanel(); return; } // outpost panel: B backs out, never cancels a build
