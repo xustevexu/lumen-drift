@@ -107,4 +107,4 @@ export const STATION_NAMES = ['Anchor', 'Lantern', 'Hearth', 'Keystone', 'Beacon
 export const TRADER_NAMES = ['Patient Ox', 'Silver Wake', 'Long Haul', 'Morning Rain', 'Quiet Dividend', 'Saffron Sky', 'Iron Lullaby', 'Kind Margin', 'Far Errand', 'Tin Lantern'];
 export const OUTLAW_NAMES = ['Red Jackal', 'Ash Viper', 'Grim Tally', 'Black Ledger', 'Rust Fang', 'Hollow Spur', 'Cinder Kite'];
 
-export const DAY_LENGTH = 240; // seconds per in-game day
+export const DAY_LENGTH = 320; // seconds per in-game day (was 240: time runs 25% slower)
