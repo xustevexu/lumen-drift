@@ -376,6 +376,7 @@ export class Game {
       this.outlaws.push(o);
     }
     this.fx.particles.burst(entry, 60, 90, opts.burstColor || 0xff6a4a, 6, 1.2);
+    this.story.clearChatter();
     const near = entry.distanceTo(this.player.pos) < this.player.stats.sensor;
     if (opts.toast) this.ui.toast(opts.toast, 'warn', 5); else this.ui.toast(near ? `⚠ OUTLAW CONTACT — ${n > 1 ? `${n} raiders` : base} jumped in!` : `⚠ Outlaw jump signature detected in ${this.sysInfo.name}`, 'warn', 5);
     this.audio.play('alarm', { vol: 0.8 });

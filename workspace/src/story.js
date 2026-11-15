@@ -152,6 +152,11 @@ export class Story {
     this.queue.push({ id, text, chatter: false });
     this.log(CAST[id].name, text, opts.kind || 'info');
   }
+  // drop calm radio chatter that hasn't played yet (called when a fight starts)
+  clearChatter() {
+    this.queue = this.queue.filter((q) => !q.chatter);
+    if (this.cur && this.cur.chatter) { this.cur = null; this.t = 0; const el = document.getElementById('comm'); if (el) el.classList.add('hidden'); }
+  }
   chatter(name, text) {
     if (this.queue.filter((q) => q.chatter).length >= 2) return; // never let chatter pile up
     this.queue.push({ id: null, name, text, chatter: true });

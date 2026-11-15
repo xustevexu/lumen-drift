@@ -144,6 +144,14 @@ export class AccordManager {
     const near = (list) => list.filter((x) => !x.dead && x.pos.distanceTo(p.pos) < p.stats.sensor);
     const opts = [];
     const tr = near(g.traders).filter((t) => !t.disabled);
+    // outlaws in the system: only alarmed chatter, never "quiet day" lines
+    if (g.outlaws.some((o) => !o.dead && !o.isBase && !o.static && !o.isRival)) {
+      if (tr.length) opts.push(() => g.story.chatter(tr[0].name, pick(TRADER_ALARM)));
+      if (this.patrol.length) opts.push(() => g.story.chatter(this.patrol[0].name, pick(PATROL_ENGAGE)));
+      if (g.fleet.wings.length) opts.push(() => g.story.chatter(g.fleet.wings[0].name.split(' ')[0], pick(WINGMAN_ALARM)));
+      if (opts.length) pick(opts)();
+      return;
+    }
     if (tr.length) opts.push(() => g.story.chatter(tr[0].name, pick(this.accordHere ? TRADER_ACCORD : TRADER_FRINGE)));
     if (this.patrol.length && !this.state.accord.licensed) opts.push(() => g.story.chatter(this.patrol[0].name, pick(PATROL_IDLE)));
     if (this.patrol.length && this.state.accord.licensed) opts.push(() => g.story.chatter(this.patrol[0].name, 'Licensed pilot on scope. Good to have you out here.'));
@@ -165,6 +173,8 @@ const PATROL_IDLE = ['All ships: Patrol sweep in progress. Red Wake contacts in 
 const TRADER_ACCORD = ['Nice quiet lane today. Love it when the Patrol is out.', 'Docking queue is backed up again. Tariffs, paperwork, the usual.', 'Grain prices are holding. Good season on the farms.', 'Heard the Institute is buying anything with a Lantern stamp on it.'];
 const TRADER_FRINGE = ['Keep your shields up out here, friend. No Patrol past the core.', "If you see red hulls, run. Don't play hero.", 'Fuel is cheap in the mining belts, everything else costs blood.', 'Deepcore pays cash, no questions. That\'s the Fringe for you.'];
 const FRINGE_OPEN = ['...anybody copy? Lost a hauler near the belt, red hulls everywhere...', 'Settlers\' market opens at dawn. Bring water filters if you have them.', "Union strike's over. Ore's moving again.", 'Somebody tell the Accord we can protect ourselves just fine.'];
+const TRADER_ALARM = ['Red hulls on scope! I\'m getting clear, good luck!', 'Raiders in the system! All haulers, run for the station!', 'Somebody deal with those outlaws, please!'];
+const WINGMAN_ALARM = ['Contacts! Stay close, I\'ve got your wing.', 'Hostiles inbound. Weapons hot.', 'Here they come. Pick a target, I\'ll follow.'];
 const WINGMAN = ['Formation holding. Your six is clear.', 'Quiet out here. I don\'t trust quiet.', 'Say the word and we\'ll light them up.'];
 const PIRATE_TAUNT = ['Nice ship. Shame about the pilot.', 'Drop your cargo and we might let you limp home.', 'The Red Wake says hello.', "You're a long way from the Patrol, little hauler."];
 const ENFORCER = ['You know why we\'re here.', 'Accord enforcement. Power down and prepare to be boarded.', 'Your name is on our list, pilot.'];
