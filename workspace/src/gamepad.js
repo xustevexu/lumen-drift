@@ -239,13 +239,22 @@ export class GamepadInput {
     } else if (ctx === 'pause') {
       if (S.hit(B.B) || S.hit(B.START)) this.ui.togglePause();
     } else if (ctx === 'dialog') {
-      if (S.hit(B.B)) { const c = this.buttons(root).find((b) => /CANCEL|CLOSE/.test(b.textContent)); if (c) c.click(); }
+      if (S.hit(B.B)) {
+        const op = this.g.outposts && this.g.outposts.panel;
+        if (op) { if (op.view === 'choose') this.g.outposts.panelAction('back'); else this.g.outposts.closePanel(); return; } // outpost panel: B backs out, never cancels a build
+        const c = this.backButton(this.buttons(root)); if (c) c.click();
+      }
     }
+  }
+  // the dialog's "leave" button: exact labels only, so buttons like "CANCEL (½ refund)" are never pressed by B
+  backButton(list) {
+    const label = (b) => b.textContent.trim().toUpperCase();
+    return list.find((b) => /^(CLOSE|BACK)$/.test(label(b))) || list.find((b) => /^(CANCEL|NOT HERE|CONTINUE)$/.test(label(b)));
   }
   // where focus starts in each menu: never on a destructive or leave-the-screen button
   defaultFocus(ctx, root, list) {
     if (ctx === 'station') return list.find((b) => b.closest('#stBody')) || list.find((b) => b.classList.contains('tab')) || list[0];
-    if (ctx === 'dialog') return list.find((b) => /CANCEL|CLOSE/.test(b.textContent)) || list.find((b) => b.classList.contains('primary')) || list[0];
+    if (ctx === 'dialog') return this.backButton(list) || list.find((b) => b.classList.contains('primary')) || list[0];
     return list.find((b) => b.classList.contains('primary')) || list[0];
   }
   cycleTabs(tabs, step) {
