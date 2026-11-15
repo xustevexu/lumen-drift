@@ -175,12 +175,17 @@ export class Story {
       el = document.createElement('div'); el.id = 'comm'; el.className = 'hidden';
       el.innerHTML = '<div class="comm-pic"></div><div class="comm-body"><div class="comm-name"></div><div class="comm-text"></div></div>';
       el.addEventListener('click', () => { this.t = 0; });
-      document.body.appendChild(el);
+      // lives at the top of the HUD's top stack, so toasts and the target panel flow below it instead of overlapping
+      const stack = document.getElementById('topStack');
+      if (stack) stack.prepend(el); else document.body.appendChild(el);
     }
     return el;
   }
   updateComms(dt) {
     const el = this.el();
+    // in flight the panel stacks above the toasts; docked, it floats over the station screen
+    const stack = document.getElementById('topStack'), want = this.g.docked || !stack ? document.body : stack;
+    if (el.parentNode !== want) { if (want === stack) stack.prepend(el); else document.body.appendChild(el); }
     if (this.cur) {
       this.cur.shown = Math.min(this.cur.text.length, this.cur.shown + dt * 55); // typewriter
       el.querySelector('.comm-text').textContent = this.cur.text.slice(0, Math.floor(this.cur.shown));
