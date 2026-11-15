@@ -69,7 +69,23 @@ export function generateGalaxy(seed) {
   systems.forEach((s) => (counts[s.eco] = (counts[s.eco] || 0) + 1));
   const dup = systems.find((s) => s.id !== start && !systems[start].links.includes(s.id) && counts[s.eco] > 1 && s.eco !== 'frontier');
   if (dup) { dup.eco = 'agricultural'; dup.danger = ECONOMIES.agricultural.danger + rng.range(0, 0.02); }
-  return { seed, systems, startId: start };
+  // Hidden 10th system (Lumen's Rest): generated with its own RNG AFTER everything else so the nine
+  // charted systems are identical to older versions. No links until the player unlocks the dormant gate.
+  const hr = new RNG(seed + 7777);
+  const corners = [[70, 70], [930, 70], [70, 550], [930, 550]];
+  const corner = corners.map(([x, y]) => ({ x, y, d: Math.min(...systems.map((q) => Math.hypot(q.x - x, q.y - y))) })).sort((a, b) => b.d - a.d)[0];
+  const host = systems.slice().sort((a, b) => Math.hypot(a.x - corner.x, a.y - corner.y) - Math.hypot(b.x - corner.x, b.y - corner.y))[0];
+  systems.push({ id: N, name: "Lumen's Rest", x: corner.x, y: corner.y, eco: 'hightech', danger: 0.04, seed: hr.int(1, 2 ** 30), links: [], station: 'Halcyon Ark', hidden: true, host: host.id });
+  return { seed, systems, startId: start, hiddenId: N, hostId: host.id };
+}
+
+// Open the dormant gate route once the player has triangulated it (call after generateGalaxy).
+export function applyUnlocks(galaxy, state) {
+  const ex = state && state.explore;
+  if (!ex || !ex.unlocked) return galaxy;
+  const h = galaxy.systems[galaxy.hiddenId], host = galaxy.systems[galaxy.hostId];
+  if (!h.links.includes(host.id)) { h.links.push(host.id); host.links.push(h.id); }
+  return galaxy;
 }
 
 function far(p, list, minD) { return list.every((q) => Math.hypot(p[0] - q.pos[0], p[2] - q.pos[2]) > minD + (q.r || 0)); }
@@ -113,8 +129,9 @@ export function generateSystem(sys, galaxy) {
   if (!station) station = { pos: [host.pos[0] + host.radius + 900, 0, host.pos[2]], name: `${sys.station} Station` };
   occupied.push({ pos: station.pos, r: 400 });
 
-  // gates toward linked systems
-  const gates = sys.links.map((lid) => {
+  // gates toward linked systems (a link to the hidden system is added at the end with its own RNG)
+  const isHiddenLink = (lid) => galaxy.systems[lid].hidden && !sys.hidden;
+  const gates = sys.links.filter((lid) => !isHiddenLink(lid)).map((lid) => {
     const o = galaxy.systems[lid];
     const dx = o.x - sys.x, dz = o.y - sys.y; const L = Math.hypot(dx, dz) || 1;
     const r = 8200 + rng.range(-300, 300);
@@ -151,5 +168,11 @@ export function generateSystem(sys, galaxy) {
     i++;
   }
 
-  return { id: sys.id, name: sys.name, eco: sys.eco, star, nebula, planets, station, gates, fields, derelicts };
+  for (const lid of sys.links.filter(isHiddenLink)) {
+    const o = galaxy.systems[lid]; const dx = o.x - sys.x, dz = o.y - sys.y; const L = Math.hypot(dx, dz) || 1;
+    gates.push({ to: lid, pos: [(dx / L) * 8200, 0, (dz / L) * 8200], name: `Gate → ${o.name}` });
+  }
+  // the hidden system: rich Lumenite fields
+  if (sys.hidden) for (const f of fields) { f.primary = 'lumenite'; f.secondary = 'cobalt'; f.lumenite = 0.3; }
+  return { id: sys.id, name: sys.name, eco: sys.eco, star, nebula, planets, station, gates, fields, derelicts, hidden: !!sys.hidden };
 }

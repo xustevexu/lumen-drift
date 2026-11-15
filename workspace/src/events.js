@@ -54,6 +54,7 @@ export function rollEvents(state, galaxy) {
   const active = (type, sys) => ev.list.some((e) => e.type === type && (sys == null || e.sys === sys));
   const count = (type) => ev.list.filter((e) => e.type === type).length;
   for (const s of galaxy.systems) {
+    if (s.hidden && !s.links.length) continue; // Lumen's Rest stays silent until its gate is open
     // always draw the same number of values per system so outcomes stay stable
     const r = { distress: rng.next(), vein: rng.next(), market: rng.next(), base: rng.next() };
     const sub = { a: rng.next(), b: rng.next(), c: rng.next(), d: rng.next(), seed: rng.int(1, 1e9) };

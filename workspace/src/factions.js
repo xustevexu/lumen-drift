@@ -55,6 +55,7 @@ export const UNIQUES = {
   overcharger: { faction: 'industrial', name: 'Forge Overcharger', desc: 'Beam damage +25%.', price: 30000 },
   lattice: { faction: 'hightech', name: 'Lumen Lattice', desc: 'Barrier capacity +35%, regeneration +25%.', price: 30000 },
   driftengine: { faction: 'frontier', name: 'Drift Engine', desc: 'Top speed +15%. Cruise can no longer be disrupted by nearby hostiles or interdiction.', price: 28000 },
+  heart: { faction: 'artifact', name: 'Lumen Heart', desc: 'The seed crystal of the Lantern Fleet. Energy pool and recharge +35%, barrier +20%. One of a kind.', price: 0 },
   ghost: { faction: 'pirate', name: 'Ghost Transponder', desc: 'Masks your signature. Pirate raid chance halved. Sold quietly at Frontier stations.', price: 22000 },
 };
 export const UNIQUE_BY_FACTION = Object.fromEntries(Object.entries(UNIQUES).map(([id, u]) => [u.faction, { id, ...u }]));
@@ -69,6 +70,7 @@ export function applyUniques(stats, uniques) {
     if (u === 'lattice') { s.shield = Math.round(s.shield * 1.35); s.shieldRegen *= 1.25; }
     if (u === 'driftengine') { s.speed *= 1.15; s.noInterdict = true; }
     if (u === 'ghost') s.ghost = true;
+    if (u === 'heart') { s.energy = Math.round(s.energy * 1.35); s.energyRegen *= 1.35; s.shield = Math.round(s.shield * 1.2); }
   }
   return s;
 }

@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { generateGalaxy, generateSystem } from './galaxy.js';
+import { generateGalaxy, generateSystem, applyUnlocks } from './galaxy.js';
 import { World } from './world.js';
 import { Ship, FX } from './entities.js';
 import { Economy, newState, pilotRank, netWorth } from './economy.js';
 import { readAuto, writeAuto, clearAuto, requestPersistence } from './save.js';
+import { clearSystemCache } from './missions.js';
 import { MAX_ACTIVE, normalizeMissionState, missionSpace, missionLure, boundToShip, markTaken, routePath, missionDanger, reqMet, reqText, standingGain, standingOf, standingTier } from './missions.js';
 import { HULLS, COMM, COMMODITIES, ECONOMIES, computeStats, DAY_LENGTH, TRADER_NAMES, OUTLAW_NAMES } from './data.js';
 import { makeGlbTemplate, buildShipTemplate } from './ships.js';
@@ -18,6 +19,7 @@ import * as OM from './outpostModels.js';
 import { OutpostManager, normalizeOutpostState } from './outposts.js';
 import { SiegeManager, normalizeSiegeState } from './siege.js';
 import { FleetManager, normalizeFleetState } from './fleet.js';
+import { ExploreManager, normalizeExploreState } from './explore.js';
 import { SectorEvents, normalizeEventState } from './events.js';
 import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
 import { RNG, clamp, damp, fmt } from './rng.js';
@@ -59,6 +61,7 @@ export class Game {
     this.outposts = new OutpostManager(this);
     this.siege = new SiegeManager(this);
     this.fleet = new FleetManager(this);
+    this.explore = new ExploreManager(this);
     window.addEventListener('resize', () => this.resize());
     this.resize();
 
@@ -69,7 +72,7 @@ export class Game {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveOnLeave(); });
     window.addEventListener('pagehide', saveOnLeave);
     this.state = saved || newState(params.get('seed') ? Number(params.get('seed')) : Math.floor(Math.random() * 1e9));
-    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state); normalizeSiegeState(this.state); normalizeFleetState(this.state);
+    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state); normalizeSiegeState(this.state); normalizeFleetState(this.state); normalizeExploreState(this.state);
     this.hasSave = !!saved;
     this.applyQuality(this.state.quality);
 
@@ -85,7 +88,7 @@ export class Game {
         (err) => { console.warn('outlaw model failed, using procedural fallback', err); this.outlawTpl = null; prog.model = 1; report('Ship models ready'); resolve(); });
     });
     // world generation in small steps so the bar is honest
-    this.galaxy = generateGalaxy(this.state.seed);
+    this.galaxy = applyUnlocks(generateGalaxy(this.state.seed), this.state);
     this.economy = new Economy(this.galaxy, this.state);
     if (this.state.systemId == null) this.state.systemId = this.galaxy.startId;
     prog.world = 0.2; report('Charting star systems');
@@ -150,7 +153,8 @@ export class Game {
     if (fresh) {
       clearAuto();
       const seed = Math.floor(Math.random() * 1e9);
-      this.state = normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed)))))));
+      this.state = normalizeExploreState(normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed))))))));
+      clearSystemCache();
       this.galaxy = generateGalaxy(seed);
       this.economy = new Economy(this.galaxy, this.state);
       this.state.systemId = this.galaxy.startId;
@@ -239,6 +243,7 @@ export class Game {
     this.outposts.onEnterSystem();
     this.siege.onEnterSystem();
     this.fleet.spawnAll();
+    this.explore.onEnterSystem();
     if (!initial) this.ui.toast(`${sys.name} · ${ECONOMIES[sys.eco].name} system`, 'info', 3.5);
     this.ui.onSystemChanged();
   }
@@ -397,11 +402,11 @@ export class Game {
       if (o.dead) { this.outlaws.splice(i, 1); continue; }
       if (o.static) { this.updateTurret(o, dt); continue; }
       o.retarget -= dt;
-      if (o.state !== 'flee' && (o.retarget <= 0 || !o.tgt || o.tgt.dead)) { o.tgt = o.siegeOf ? (this.siege.target(o) || (this.docked ? null : this.player)) : o.raidOf ? (this.outposts.raidTarget(o) || (this.docked ? null : this.player)) : o.faction ? (this.docked ? null : this.player) : this.pickOutlawTarget(o); o.retarget = 4; }
+      if (o.state !== 'flee' && (o.retarget <= 0 || !o.tgt || o.tgt.dead)) { o.tgt = o.sentinelOf ? (this.docked ? null : this.player) : o.siegeOf ? (this.siege.target(o) || (this.docked ? null : this.player)) : o.raidOf ? (this.outposts.raidTarget(o) || (this.docked ? null : this.player)) : o.faction ? (this.docked ? null : this.player) : this.pickOutlawTarget(o); o.retarget = 4; }
       // retaliate against whoever is shooting at us
       if (o.state !== 'flee' && o.lastAttacker && !o.lastAttacker.dead && this.time - o.lastHit < 10 && !(o.lastAttacker === this.player && this.docked)) o.tgt = o.lastAttacker;
-      if (o.hp < o.maxHp * 0.22 && o.state !== 'flee') { o.state = 'flee'; this.ui.toast(`${o.name} is breaking off!`, 'info', 2.5); }
-      if (this.time - o.spawnTime > DAY_LENGTH * 1.2 && o.state !== 'flee') o.state = 'flee';
+      if (o.hp < o.maxHp * 0.22 && o.state !== 'flee' && !o.sentinelOf) { o.state = 'flee'; this.ui.toast(`${o.name} is breaking off!`, 'info', 2.5); }
+      if (this.time - o.spawnTime > DAY_LENGTH * 1.2 && o.state !== 'flee' && !o.sentinelOf) o.state = 'flee';
       const t = o.tgt;
       o.firing = false; o.cruise = false; o.boost = false;
       if (o.state === 'flee' || !t) {
@@ -492,6 +497,7 @@ export class Game {
   }
 
   destroyShip(ship, attacker) {
+    if (ship.sentinelOf) { if (ship.beam) ship.beam.visible = false; if (this.target === ship) this.target = null; ship.remove(); this.explore.onSentinelDown(ship); this.state.stats.kills++; return; }
     if (ship.isWingman) { this.fx.explosion(ship.pos.clone(), ship.radius / 6, 0xffb060); ship.remove(); this.fleet.onDown(ship); return; }
     if (ship.isSiegeProxy) { ship.remove(); this.siege.onProxyDestroyed(); return; }
     if (ship.isOutpost) { ship.remove(); this.outposts.onProxyDestroyed(ship); return; }
@@ -659,8 +665,9 @@ export class Game {
 
   // Replace the whole career with a loaded save (slot, autosave or imported file).
   loadGame(state) {
-    this.state = normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(state))))));
-    this.galaxy = generateGalaxy(state.seed);
+    this.state = normalizeExploreState(normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(state)))))));
+    clearSystemCache();
+    this.galaxy = applyUnlocks(generateGalaxy(state.seed), state);
     this.economy = new Economy(this.galaxy, state);
     if (state.systemId == null) state.systemId = this.galaxy.startId;
     this.docked = false; this.warp = null; this.autopilot = null; this.target = null; this.salvage = null;
@@ -708,6 +715,8 @@ export class Game {
     for (const g of W.gates) if (g.pos.distanceTo(p.pos) < 340) return { type: 'jump', label: `JUMP › ${this.galaxy.systems[g.to].name}`, gate: g, warm: true };
     const assist = this.events.interaction(p);
     if (assist) return assist;
+    const anomaly = this.explore.interaction(p);
+    if (anomaly) return anomaly;
     // contract drop-off in low orbit above a planet colony
     const drops = this.missionsAboard().filter((m) => m.dest.kind === 'planet' && m.dest.sys === this.state.systemId && this.landingPoint(m.dest.planet).distanceTo(p.pos) < 250);
     if (drops.length) return { type: 'dropoff', label: drops.some((m) => m.type === 'passenger') ? 'DROP OFF' : 'DELIVER', missions: drops, warm: true };
@@ -733,6 +742,7 @@ export class Game {
     else if (act.type === 'jump') this.beginJump(act.gate);
     else if (act.type === 'hail') this.ui.openTraderDialog(act.trader);
     else if (act.type === 'outpost') this.outposts.openPanel(act.outpost);
+    else if (act.type === 'dormant') this.explore.dormantDialog();
     else if (act.type === 'establish') {
       this.ui.dialog(`<div class="ov-title">ESTABLISH OUTPOST?</div><p>Found an outpost at <b>${act.site.name}</b>. Site ore: <b>${COMM[act.site.ore].name}</b>${act.site.gas ? ' (gas giant: build a Gas Siphon here)' : ''}.</p><p>This uses 1 Outpost Charter (you have ${this.state.charters}).</p>`,
         [{ label: 'ESTABLISH', primary: true, fn: () => this.outposts.establish(act.site) }, { label: 'NOT HERE' }]);
@@ -1159,10 +1169,12 @@ export class Game {
     this.updateSalvage(dt, act);
     if (act && act.type !== 'mine' && act.type !== 'salvage' && !(act.type === 'salvage')) { this.mineBeam.visible = this.input.mine && act.type === 'salvage'; }
     this.events.updateAssist(dt, act);
+    this.explore.updateHold(dt, act);
     this.events.update(dt);
     this.outposts.update(dt);
     this.siege.update(dt);
     this.fleet.update(dt);
+    this.explore.update(dt);
     // battle music when outlaws are close
     const near = this.hostilesNear(1600);
     this.audio.setMusic(near ? 'battle' : 'calm');

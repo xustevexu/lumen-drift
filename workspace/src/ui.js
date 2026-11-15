@@ -8,6 +8,7 @@ import { CHARTER_PRICE, maxOutposts, storageUsed, storageCap, builtMods } from '
 import { MILITIA_PRICE, MILITIA_MAX } from './siege.js';
 import { SKILLS, ROUTE_WAGE, maxWingmen, skillOf } from './fleet.js';
 import { jumpsFrom } from './missions.js';
+import { LORE, TYPES, PROBE_PRICE, PROBE_MAX, FRAGMENTS_TO_UNLOCK, systemExploreStatus } from './explore.js';
 import { FACTIONS, FACTION_ORDER, UNIQUES, UNIQUE_BY_FACTION, factionTier, nextFactionTier, standingWith, tierPerks, uniqueSlots } from './factions.js';
 import { MAX_ACTIVE, offersFor, missionSpace, boundToShip, typeTag, modTags, destText, needText, dueText, reqMet, reqText, standingOf, standingTier, nextStanding } from './missions.js';
 
@@ -292,6 +293,7 @@ export class UI {
     W.fields.forEach((f, i) => { if (f.surge || f.center.distanceTo(p.pos) > f.radius) list.push({ key: `field${i}`, pos: f.center, cls: f.surge ? 'field surge' : 'field', name: f.surge ? `✦ LUMENITE SURGE · ${f.name}` : `${f.name} · ${COMM[f.primary].name}`, edge: !!f.surge }); });
     for (const m of g.events.markers()) list.push({ ...m, cls: 'event' + (m.ship === g.target ? ' target' : '') });
     for (const m of g.outposts.markers()) list.push(m);
+    for (const m of g.explore.markers()) list.push(m);
     for (const a of g.fleet.wings) if (!a.dead && a.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${a.uid}`, pos: a.pos, cls: 'ally', name: a.name.split(' ')[0] });
     for (const a of g.siege.allies) if (!a.dead && a.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${a.uid}`, pos: a.pos, cls: 'ally', name: a.name });
     W.deposits.forEach((d, i) => { if (d.pos.distanceTo(p.pos) < 5000 && d.amount > 0) list.push({ key: `dep${i}`, pos: d.pos, cls: 'deposit', name: `◆ ${COMM[d.ore].name} deposit` }); });
@@ -557,6 +559,9 @@ export class UI {
       const u = UNIQUES[id];
       h += `<div class="card active"><h3>${u.name}<span class="cls">INSTALLED</span></h3><p>${u.desc}</p><button class="pbtn secondary" style="font-size:13px;padding:8px" data-act="rmunique" data-arg="${id}">REMOVE · refund ◈ ${fmt(Math.round(this.uniquePrice(id, rec.hull) / 2))}</button></div>`;
     }
+    if (s.explore.heart && !s.ships.some((x) => x.uniques.includes('heart'))) {
+      h += `<div class="card"><h3>Lumen Heart<span class="cls" style="color:#c8f56a">ARTIFACT</span></h3><p>${UNIQUES.heart.desc}</p><button class="pbtn ${used < slots ? 'primary' : 'secondary'}" style="font-size:13px;padding:8px" data-act="heart" ${used < slots ? '' : 'disabled'}>${used < slots ? 'INSTALL (FREE)' : 'NO FREE SLOT'}</button></div>`;
+    }
     for (const u of offers) {
       if (rec.uniques.includes(u.id)) continue;
       const t = factionTier(standingWith(s, u.faction)), price = this.uniquePrice(u.id, rec.hull);
@@ -644,6 +649,15 @@ export class UI {
     const here = (e) => e.sys === s.systemId ? ' <small>(this system)</small>' : '';
     return `<div class="card news"><div><h3>Sector News · Day ${s.day}</h3>${evs.map((e) => { const d = describe(e, g.galaxy, s, g.player.stats.sensorLvl); return `<p><b style="color:${d.col}">${d.ch}</b> <b>${d.title}</b>${here(e)}: ${d.line}</p>`; }).join('')}</div></div>`;
   }
+  exploreHTML() {
+    const g = this.g, ex = g.state.explore, n = ex.lore;
+    const logs = LORE.slice(0, n).map((L, i) => `<details><summary><b>Log ${i + 1}: ${L.title}</b></summary><p style="font-style:italic">${L.text}</p></details>`).join('')
+      + (ex.heart ? `<details><summary><b>Log ${LORE.length}: ${LORE[LORE.length - 1].title}</b></summary><p style="font-style:italic">${LORE[LORE.length - 1].text}</p></details>` : '');
+    const gate = ex.unlocked ? `<p>✧ The dormant gate in <b>${g.galaxy.systems[g.galaxy.hostId].name}</b> is open: Lumen's Rest is on your chart.</p>` : `<p>Recover <b>${FRAGMENTS_TO_UNLOCK}</b> logs to wake the dormant gate (${n}/${FRAGMENTS_TO_UNLOCK}).</p>`;
+    return `<div class="card news"><div><h3>Exploration</h3><p>Every system hides anomalies: wrecks, crystal pockets, beacons, rifts, guarded caches. Your sensors pick them up at close range; a scanner probe charts a whole system at once (launch from the MAP).</p>
+      <p>Probes: <b>${ex.probes}/${PROBE_MAX}</b> <button class="sbtn buy" data-act="probe" ${ex.probes < PROBE_MAX && g.state.credits >= PROBE_PRICE ? '' : 'disabled'}>BUY PROBE · ◈ ${PROBE_PRICE}</button></p>
+      <h3 style="margin-top:6px">📜 Exodus Logs</h3>${gate}${logs || '<p><small>No logs recovered yet. Look for Lantern Fleet wrecks.</small></p>'}</div></div>`;
+  }
   outpostsHTML() {
     const g = this.g, s = g.state, max = maxOutposts(s), ft = factionTier(standingWith(s, g.sysInfo.eco));
     const why = s.credits < CHARTER_PRICE ? `◈ ${fmt(CHARTER_PRICE)}` : ft.level < 0 ? `NEEDS NEUTRAL WITH ${FACTIONS[g.sysInfo.eco].short.toUpperCase()}` : s.outposts.length + s.charters >= max ? `LIMIT ${max} AT YOUR RANK` : '';
@@ -676,6 +690,7 @@ export class UI {
       <div class="card"><div><h3>Missile Restock</h3><p>${p.stats.mslCap ? `${p.missiles}/${p.stats.mslCap} loaded · ◈60 each` : 'No missile rack installed'}</p></div><button class="sbtn buy" data-act="missiles" ${mslNeed > 0 && s.credits >= mslCost ? '' : 'disabled'}>◈ ${fmt(mslCost)}</button></div>
       ${this.siegeHTML()}
       ${this.newsHTML()}
+      ${this.exploreHTML()}
       ${this.outpostsHTML()}
       ${this.factionsHTML()}
       <div class="card"><div><h3>Rest Until Tomorrow</h3><p>Skip to Day ${s.day + 1}. Prices recover, rocks and deposits regrow, new events may appear.${restNote}</p></div><button class="sbtn" data-act="rest">REST</button></div>
@@ -734,6 +749,8 @@ export class UI {
       while (q > 0 && E.quoteBuy(sid, arg, q) > s.credits) q--;
       if (q > 0) { const cost = E.buy(sid, arg, q); s.credits -= cost; p.cargo[arg] = (p.cargo[arg] || 0) + q; s.stats.trades++; g.audio.play('click', { vol: 0.6 }); }
       else this.toast('Not enough credits or cargo space', 'warn', 2);
+    } else if (act === 'probe') {
+      if (g.state.explore.probes < PROBE_MAX && s.credits >= PROBE_PRICE) { s.credits -= PROBE_PRICE; g.state.explore.probes++; g.audio.play('click', { vol: 0.6 }); }
     } else if (act === 'hire') {
       if (g.fleet.hire(arg)) { g.audio.play('coins', { vol: 0.7 }); this.toast('Wingman hired: they launch with you when you undock', 'good', 3); }
     } else if (act === 'dismiss') { g.fleet.dismiss(arg);
@@ -752,6 +769,9 @@ export class UI {
         s.credits -= price; rec.uniques.push(arg); g.refreshPlayerStats(); p.shield = Math.min(p.shield, p.maxShield);
         g.audio.play('coins', { vol: 0.9 }); this.toast(`${UNIQUES[arg].name} installed`, 'good', 3);
       }
+    } else if (act === 'heart') {
+      const rec = g.activeShipRec();
+      if (s.explore.heart && rec.uniques.length < uniqueSlots(rec.hull) && !s.ships.some((x) => x.uniques.includes('heart'))) { rec.uniques.push('heart'); g.refreshPlayerStats(); g.audio.play('warp', { vol: 0.6 }); this.toast('The Lumen Heart hums to life in your ship', 'good', 4); }
     } else if (act === 'rmunique') {
       const rec = g.activeShipRec();
       if (rec.uniques.includes(arg)) { rec.uniques = rec.uniques.filter((x) => x !== arg); g.addCredits(Math.round(this.uniquePrice(arg, rec.hull) / 2)); g.refreshPlayerStats(); this.toast(`${UNIQUES[arg].name} removed`, 'info', 2.5); }
@@ -837,6 +857,14 @@ export class UI {
   closeMap() { $('mapOv').classList.add('hidden'); }
   renderMapTabs() {
     [...$('mapTabs').children].forEach((t) => t.classList.toggle('on', t.dataset.tab === this.mapTab));
+    let pb = $('btnProbe');
+    if (!pb) {
+      pb = document.createElement('button'); pb.id = 'btnProbe'; pb.className = 'pbtn secondary';
+      pb.addEventListener('click', () => { if (this.g.explore.probe()) { this.drawMap(); this.renderMapTabs(); } });
+      $('btnMapClose').parentNode.insertBefore(pb, $('btnMapClose'));
+    }
+    pb.textContent = `LAUNCH PROBE (${this.g.state.explore.probes})`;
+    pb.disabled = !this.g.state.explore.probes; pb.style.display = this.mapTab === 'system' ? '' : 'none';
     $('mapSub').textContent = this.mapTab === 'system' ? `${this.g.sysInfo.name} system · tap a destination for autopilot` : 'Galaxy chart · tap a system for market intel & routes';
     this.renderMapInfo();
   }
@@ -861,6 +889,7 @@ export class UI {
     Wd.derelicts.forEach((d) => { if (!d.occupied) items.push({ kind: 'derelict', pos: d.pos, name: d.name, color: '#ffb07a', r: 5, arrive: 120 }); });
     items.push(...g.events.mapItems());
     items.push(...g.outposts.mapItems());
+    items.push(...g.explore.mapItems());
     return items;
   }
   drawMap() {
@@ -890,7 +919,7 @@ export class UI {
     ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(sx, sy, glowR, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = 'rgba(239,230,210,.12)';
     for (const pl of g.world.planets) { const d = Math.hypot(pl.pos.x, pl.pos.z) * s; ctx.beginPath(); ctx.arc(sx, sy, d, 0, Math.PI * 2); ctx.stroke(); }
-    const PRI = { outpost: 7, site: 0, event: 6, station: 5, gate: 4, planet: 3, field: 2, derelict: 1 };
+    const PRI = { anomaly: 3, outpost: 7, site: 0, event: 6, station: 5, gate: 4, planet: 3, field: 2, derelict: 1 };
     const labels = [];
     for (const it of this.systemItems()) {
       const [x, y] = P(it.pos);
@@ -1027,13 +1056,15 @@ export class UI {
   drawGalaxyMap(ctx, W, H) {
     const g = this.g, P = this.galProj(W, H), S = g.galaxy.systems, cur = g.state.systemId;
     ctx.lineWidth = 3;
-    for (const s of S) for (const l of s.links) if (l > s.id) {
+    const visible = (s) => !s.hidden || s.links.length;
+    for (const s of S) for (const l of s.links) if (l > s.id && visible(s) && visible(S[l])) {
       const [x1, y1] = P(s), [x2, y2] = P(S[l]);
       ctx.strokeStyle = (s.id === cur || l === cur) ? 'rgba(63,184,200,.9)' : 'rgba(239,230,210,.28)';
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
     }
     const labels = [];
     for (const s of S) {
+      if (!visible(s)) continue;
       const [x, y] = P(s);
       const known = g.state.intel[s.id];
       ctx.fillStyle = ECO_COL[s.eco]; ctx.strokeStyle = '#141826'; ctx.lineWidth = 3;
@@ -1092,7 +1123,7 @@ export class UI {
       for (const it of this.systemItems()) { const [x, y, s] = P(it.pos); const d = Math.hypot(x - mx, y - my) - (it.ring ? Math.min(it.ring * s, 30) : 0); if (d < bd) { bd = d; best = it; } }
     } else {
       const P = this.galProj(W, H);
-      for (const s of this.g.galaxy.systems) { const [x, y] = P(s); const d = Math.hypot(x - mx, y - my); if (d < bd) { bd = d; best = { sys: s.id, name: s.name }; } }
+      for (const s of this.g.galaxy.systems) { if (s.hidden && !s.links.length) continue; const [x, y] = P(s); const d = Math.hypot(x - mx, y - my); if (d < bd) { bd = d; best = { sys: s.id, name: s.name }; } }
     }
     this.mapSel = best; this.g.audio.play('click', { vol: 0.3 });
     this.renderMapInfo(); this.drawMap();
@@ -1114,6 +1145,7 @@ export class UI {
       if (sel.kind === 'station') extra = '<p>Safe harbor: market, upgrades, shipyard, repairs.</p>';
       if (sel.kind === 'derelict') extra = '<p>Abandoned hulk. Hold SALVAGE nearby for credits & parts. Restocks every 3 days.</p>';
       if (sel.kind === 'field' && sel.field.surge) extra += '<p style="color:#4f7a10"><b>✦ Lumenite surge today:</b> far higher chance of Lumenite from every rock here.</p>';
+      if (sel.kind === 'anomaly') { const a = sel.anomaly; extra = a.type === 'dormant' ? `<p>A cold, uncharted jump gate. Exodus Logs: <b>${g.state.explore.lore}/${FRAGMENTS_TO_UNLOCK}</b> to wake it.</p>` : g.state.explore.seen[a.key] === 2 || a.type === 'spire' ? `<p>${TYPES[a.type].desc} Fly close and hold INVESTIGATE.</p>` : '<p>An unidentified signal. Fly close and hold INVESTIGATE, or launch a probe to identify it.</p>'; }
       if (sel.kind === 'outpost') { const o = sel.outpost; extra = `<p>Your outpost: ${builtMods(o).length} modules · storage ${storageUsed(o)}/${storageCap(o)}${o.credits ? ` · ◈${fmt(o.credits)} to collect` : ''}${o.raid && o.raid.phase !== 'pending' ? ' · <b style="color:#b0451a">⚠ RAID INCOMING</b>' : ''}</p>`; }
       if (sel.kind === 'site') extra = `<p>Unclaimed outpost site. Ore: <b>${COMM[sel.site.ore].name}</b>${sel.site.gas ? ' (gas giant)' : ''}. Fly here and press ESTABLISH OUTPOST.</p>`;
       if (sel.kind === 'event') { const d = describe(sel.ev, g.galaxy, g.state, g.player.stats.sensorLvl); extra = `<p>${d.line}</p>${sel.ev.type === 'distress' ? '<p>Fly alongside and hold ASSIST to patch the ship up.</p>' : sel.ev.type === 'wreck' ? '<p>Fly close and hold SALVAGE.</p>' : '<p>Approach and the base launches its guards. Destroy the base itself for the loot.</p>'}`; }
@@ -1139,8 +1171,9 @@ export class UI {
       const ms = there.length ? `<p style="color:#9a6a00"><b>★ Contracts here:</b> ${there.map((m) => `${m.title} → ${m.dest.name} (due Day ${m.deadline})`).join('; ')}</p>` : '';
       const evs = liveEvents(g.state).filter((e) => e.sys === s.id).map((e) => { const d = describe(e, g.galaxy, g.state, g.player.stats.sensorLvl); return `<p><b style="color:${d.col}">${d.ch}</b> <b>${d.title}:</b> ${d.line}</p>`; }).join('');
       const ft = factionTier(standingWith(g.state, s.eco));
+      const es = systemExploreStatus(g.state, g.galaxy, s.id), exploreTxt = `<p><small>Anomalies: ${es.seen} of ${es.total} found, ${es.done} investigated</small></p>`;
       const SA = g.state.siege.active, siegeTxt = SA && SA.phase !== 'done' && SA.target.sys === s.id ? `<p style="color:#b0451a"><b>⚔ Siege:</b> ${g.siege.newsLine()}</p>` : '';
-      box.innerHTML = `<h4>${s.name}</h4><p>${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * 100)}%/day</p><p><b style="color:${FACTIONS[s.eco].color}">${FACTIONS[s.eco].name}</b> · you are <b>${ft.name}</b>${ft.level <= -1 ? ' <span style="color:#ff6b4a">(enforcers may hunt you)</span>' : ''}</p>${siegeTxt}${evs}${ms}${rows}${btn}`;
+      box.innerHTML = `<h4>${s.name}</h4><p>${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * 100)}%/day</p><p><b style="color:${FACTIONS[s.eco].color}">${FACTIONS[s.eco].name}</b> · you are <b>${ft.name}</b>${ft.level <= -1 ? ' <span style="color:#ff6b4a">(enforcers may hunt you)</span>' : ''}</p>${siegeTxt}${exploreTxt}${evs}${ms}${rows}${btn}`;
     }
   }
   mapAction(act) {

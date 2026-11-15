@@ -261,7 +261,7 @@ export class GamepadInput {
     const ui = this.ui, c = $('mapCanvas'), W = c.clientWidth, H = c.clientHeight;
     if (ui.mapTab === 'system') { const P = ui.sysProj(W, H); return ui.systemItems().map((it) => { const [x, y] = P(it.pos); return { sel: it, x, y }; }); }
     const P = ui.galProj(W, H);
-    return this.g.galaxy.systems.map((s) => { const [x, y] = P(s); return { sel: { sys: s.id, name: s.name }, x, y }; });
+    return this.g.galaxy.systems.filter((s) => !s.hidden || s.links.length).map((s) => { const [x, y] = P(s); return { sel: { sys: s.id, name: s.name }, x, y }; });
   }
   mapNav(S) {
     const ui = this.ui, g = this.g, c = $('mapCanvas');

@@ -16,6 +16,7 @@ const VIPS = ['Magistrate Okafor', 'Envoy Lusine Varga', 'Director Halvard Ness'
 
 // ---- galaxy helpers ----
 const sysCache = new Map();
+export function clearSystemCache() { sysCache.clear(); }
 export function systemData(galaxy, id) {
   const key = `${galaxy.seed}:${id}`;
   if (!sysCache.has(key)) sysCache.set(key, generateSystem(galaxy.systems[id], galaxy));

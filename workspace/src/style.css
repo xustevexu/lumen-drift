@@ -375,3 +375,9 @@ body.gamepad:has(.overlay:not(.hidden)) #hud [data-pad]::after { display: none; 
 .mk.ally { color: #7bc86c; }
 .card.news.siege { background: #ffe1d6; }
 .route-box { border: 2px dashed var(--ink); padding: 6px 8px; background: #e3f4f6; font: 600 12px/1.35 var(--font); }
+.mk.anomaly { color: #7fe8ff; }
+.mk.anomaly .ic { border-radius: 50%; }
+.mk.dormant { color: #ff8060; }
+#btnProbe { font-size: 13px; padding: 8px 10px; margin-right: 8px; }
+.card.news details { margin: 3px 0; font: 600 12.5px/1.4 var(--font); }
+.card.news summary { cursor: pointer; }
