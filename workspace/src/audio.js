@@ -5,6 +5,16 @@ const FILES = {
   warp: './audio/sfx_warp.mp3', alarm: './audio/sfx_alarm.mp3',
 };
 
+// Loudness balance. The source files were mastered at very different levels (measured integrated loudness,
+// EBU R128 / LUFS, with ffmpeg): sfx_click is ~11 dB hotter than everything else. Every sound is scaled to a
+// common target so the per-call volumes in the game mean the same thing for every sound; UI clicks get a
+// lower target so they sit under gameplay audio instead of over it.
+const MEASURED_LUFS = { alarm: -16.3, beam: -16.4, click: -4.7, coins: -15.9, explosion: -18.9, mine: -15.5, missile: -17.1, warp: -16.1 };
+const TARGET_LUFS = { click: -24 }; // default target below
+const DEFAULT_TARGET = -17;
+const NORM = Object.fromEntries(Object.entries(MEASURED_LUFS).map(([k, l]) => [k, Math.pow(10, ((TARGET_LUFS[k] ?? DEFAULT_TARGET) - l) / 20)]));
+export const LOUDNESS_GAIN = NORM;
+
 export class Audio {
   constructor() {
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -43,7 +53,7 @@ export class Audio {
     const b = this.buffers[name]; if (!b) return;
     const a = vol * this.attenuate(pos); if (a < 0.02) return;
     const s = this.ctx.createBufferSource(); s.buffer = b; s.playbackRate.value = rate * (0.94 + Math.random() * 0.12);
-    const g = this.ctx.createGain(); g.gain.value = a;
+    const g = this.ctx.createGain(); g.gain.value = a * (NORM[name] ?? 1);
     s.connect(g); g.connect(this.sfx); s.start();
   }
   loop(key, name, on, vol = 0.5, rate = 1) {
@@ -51,13 +61,14 @@ export class Audio {
     if (on && !l && this.buffers[name]) {
       const s = this.ctx.createBufferSource(); s.buffer = this.buffers[name]; s.loop = true; s.playbackRate.value = rate;
       const g = this.ctx.createGain(); g.gain.value = 0; s.connect(g); g.connect(this.sfx); s.start();
-      g.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.04);
-      l = this.loops[key] = { s, g };
+      const n = NORM[name] ?? 1;
+      g.gain.setTargetAtTime(vol * n, this.ctx.currentTime, 0.04);
+      l = this.loops[key] = { s, g, n };
     } else if (!on && l) {
       l.g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.06);
       const s = l.s; setTimeout(() => { try { s.stop(); } catch (e) { /* already stopped */ } }, 300);
       delete this.loops[key];
-    } else if (on && l) { l.g.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.05); }
+    } else if (on && l) { l.g.gain.setTargetAtTime(vol * l.n, this.ctx.currentTime, 0.05); }
   }
   setMusic(name) {
     if (this.current === name) return;
