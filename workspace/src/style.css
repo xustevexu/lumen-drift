@@ -317,3 +317,11 @@ body.gamepad:has(.overlay:not(.hidden)) #hud [data-pad]::after { display: none; 
   .row { grid-template-columns: 1.4fr .7fr .7fr .5fr; }
   .row .btns { grid-column: 1 / -1; justify-content: flex-end; }
 }
+
+/* sector events */
+.mk.event { color: #ff8a4a; }
+.mk.event .ic { border-radius: 50%; border-color: currentColor; animation: evpulse 1s steps(2) infinite; }
+.mk.field.surge { color: #c8f56a; }
+@keyframes evpulse { 50% { opacity: .35; } }
+.svc .card.news { display: block; }
+.svc .card.news p { margin: 4px 0; font-size: 13px; }

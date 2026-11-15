@@ -3,6 +3,7 @@ import { COMMODITIES, COMM, ECONOMIES, HULLS, HULL_ORDER, MODULES, MODULE_ORDER,
 import { fmt, clamp } from './rng.js';
 import { pilotRank, netWorth, RANK_NAMES } from './economy.js';
 import { SLOT_COUNT, autoInfo, readSlot, writeSlot, summarize, exportText, exportName, parseImport, ago } from './save.js';
+import { liveEvents, describe, eventIcon, repTier, repSummary } from './events.js';
 import { MAX_ACTIVE, offersFor, missionSpace, boundToShip, typeTag, destText, needText, dueText } from './missions.js';
 
 const $ = (id) => document.getElementById(id);
@@ -190,7 +191,7 @@ export class UI {
       $('tpDist').textContent = this.dist(t.pos.distanceTo(p.pos));
       $('tpShield').style.width = `${t.maxShield ? (t.shield / t.maxShield) * 100 : 0}%`;
       $('tpHull').style.width = `${(t.hp / t.maxHp) * 100}%`;
-      let info = t.kind === 'outlaw' ? 'OUTLAW · hunting cargo' : 'TRADER';
+      let info = t.isBase ? 'PIRATE BASE · armed fortress' : t.kind === 'outlaw' ? (t.guardOf ? 'BASE GUARD' : 'OUTLAW · hunting cargo') : t.disabled ? 'TRADER · DISABLED, broadcasting distress' : 'TRADER';
       if (p.stats.sensorLvl >= 1) {
         const c = Object.entries(t.cargo).filter(([, q]) => q > 0).map(([k, q]) => `${q} ${COMM[k].name}`).join(', ');
         info += c ? ` · ${c}` : ' · empty hold';
@@ -269,11 +270,12 @@ export class UI {
     const list = [];
     list.push({ key: 'station', pos: W.station.pos, cls: 'station', name: W.station.name, edge: true });
     W.gates.forEach((gt, i) => list.push({ key: `gate${i}`, pos: gt.pos, cls: 'gate', name: `⟶ ${g.galaxy.systems[gt.to].name}`, edge: false }));
-    W.fields.forEach((f, i) => { if (f.center.distanceTo(p.pos) > f.radius) list.push({ key: `field${i}`, pos: f.center, cls: 'field', name: `${f.name} · ${COMM[f.primary].name}` }); });
+    W.fields.forEach((f, i) => { if (f.surge || f.center.distanceTo(p.pos) > f.radius) list.push({ key: `field${i}`, pos: f.center, cls: f.surge ? 'field surge' : 'field', name: f.surge ? `✦ LUMENITE SURGE · ${f.name}` : `${f.name} · ${COMM[f.primary].name}`, edge: !!f.surge }); });
+    for (const m of g.events.markers()) list.push({ ...m, cls: 'event' + (m.ship === g.target ? ' target' : '') });
     W.deposits.forEach((d, i) => { if (d.pos.distanceTo(p.pos) < 5000 && d.amount > 0) list.push({ key: `dep${i}`, pos: d.pos, cls: 'deposit', name: `◆ ${COMM[d.ore].name} deposit` }); });
-    W.derelicts.forEach((d, i) => { if (d.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `der${i}`, pos: d.pos, cls: 'derelict', name: d.name }); });
-    for (const t of g.traders) if (!t.dead && t.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${t.uid}`, pos: t.pos, cls: 'trader' + (t === g.target ? ' target' : ''), name: t.name, edge: t === g.target });
-    for (const o of g.outlaws) if (!o.dead && o.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${o.uid}`, pos: o.pos, cls: 'outlaw' + (o === g.target ? ' target' : ''), name: o.name, edge: true });
+    W.derelicts.forEach((d, i) => { if (!d.occupied && d.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `der${i}`, pos: d.pos, cls: 'derelict', name: d.name }); });
+    for (const t of g.traders) if (!t.dead && !(t.disabled && t.eventId) && t.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${t.uid}`, pos: t.pos, cls: 'trader' + (t === g.target ? ' target' : ''), name: t.name, edge: t === g.target });
+    for (const o of g.outlaws) if (!o.dead && !o.isBase && o.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${o.uid}`, pos: o.pos, cls: 'outlaw' + (o === g.target ? ' target' : ''), name: o.name, edge: true });
     for (let i = 0; i < g.fx.crates.length; i++) { const c = g.fx.crates[i]; if (c.pos.distanceTo(p.pos) < 900) list.push({ key: `c${i}`, pos: c.pos, cls: 'crate', name: c.credits ? '◈ bounty' : 'cargo' }); }
     if (g.autopilot) list.push({ key: 'ap', pos: g.autopilot.pos, cls: 'station', name: `AP: ${g.autopilot.name}`, edge: true });
     for (const t of this.missionTargets()) list.push({ key: `ms_${t.key}`, pos: t.pos, cls: 'mission', name: t.via ? `CONTRACT ROUTE${t.n > 1 ? ` ×${t.n}` : ''}` : `CONTRACT${t.n > 1 ? ` ×${t.n}` : ''} · ${t.name}`, edge: true });
@@ -500,7 +502,9 @@ export class UI {
       const sp = E.sellPrice(sid, c.id), canBuy = E.canBuy(sid, c.id) && E.stock(sid, c.id) > 0, bp = canBuy ? E.buyPrice(sid, c.id) : null;
       const have = p.cargo[c.id] || 0;
       const m = E.mult(sid, c.id);
-      const tag = m >= 1.25 ? '<span class="tag up">HIGH DEMAND</span>' : m <= 0.75 ? '<span class="tag dn">LOCAL GOOD</span>' : '';
+      const em = E.eventMult(sid, c.id);
+      const tag = (em > 1.04 ? `<span class="tag up">NEWS ▲${Math.round((em - 1) * 100)}%</span>` : em < 0.96 ? `<span class="tag dn">NEWS ▼${Math.round((1 - em) * 100)}%</span>` : '')
+        + (m >= 1.25 ? '<span class="tag up">HIGH DEMAND</span>' : m <= 0.75 ? '<span class="tag dn">LOCAL GOOD</span>' : '');
       const best = this.bestKnown(c.id);
       const bestTxt = best ? `<br><small style="opacity:.7">best seen ◈${best.v} @ ${best.name}${best.age ? ` (${best.age}d)` : ''}</small>` : '';
       const maxBuy = canBuy ? Math.max(0, Math.min(E.stock(sid, c.id), cap - used, Math.floor(g.state.credits / bp))) : 0;
@@ -553,17 +557,27 @@ export class UI {
     return h + '</div>';
   }
 
+  repairCost() { const p = this.g.player; return Math.ceil(Math.ceil(p.maxHp - p.hp) * 1.5 * HULLS[p.hullId].priceMul * (1 + repTier(this.g.state.rep).repair)); }
+  newsHTML() {
+    const g = this.g, s = g.state, evs = liveEvents(s);
+    if (!evs.length) return '<div class="card news"><div><h3>Sector News</h3><p>Quiet across the sector today.</p></div></div>';
+    const here = (e) => e.sys === s.systemId ? ' <small>(this system)</small>' : '';
+    return `<div class="card news"><div><h3>Sector News · Day ${s.day}</h3>${evs.map((e) => { const d = describe(e, g.galaxy, s, g.player.stats.sensorLvl); return `<p><b style="color:${d.col}">${d.ch}</b> <b>${d.title}</b>${here(e)}: ${d.line}</p>`; }).join('')}</div></div>`;
+  }
   servicesHTML() {
     const g = this.g, p = g.player, s = g.state;
     const missing = Math.ceil(p.maxHp - p.hp);
-    const repair = Math.ceil(missing * 1.5 * HULLS[p.hullId].priceMul);
+    const repair = this.repairCost();
+    const expiring = liveEvents(s).filter((e) => e.end === s.day && e.type !== 'market');
+    const restNote = expiring.length ? `<br><b style="color:#b0451a">Ends if you rest:</b> ${expiring.map((e) => `${describe(e, g.galaxy, s).title} in ${g.galaxy.systems[e.sys].name}`).join(', ')}` : '';
     const mslNeed = p.stats.mslCap - p.missiles; const mslCost = mslNeed * 60;
     const r = pilotRank(s);
     return `<div class="svc">
       <div class="card"><div><h3>Hull Repair</h3><p>${missing > 0 ? `${missing} damage to patch` : 'Hull is pristine'}</p></div><button class="sbtn buy" data-act="repair" ${missing > 0 && s.credits >= repair ? '' : 'disabled'}>◈ ${fmt(repair)}</button></div>
       <div class="card"><div><h3>Missile Restock</h3><p>${p.stats.mslCap ? `${p.missiles}/${p.stats.mslCap} loaded · ◈60 each` : 'No missile rack installed'}</p></div><button class="sbtn buy" data-act="missiles" ${mslNeed > 0 && s.credits >= mslCost ? '' : 'disabled'}>◈ ${fmt(mslCost)}</button></div>
-      <div class="card"><div><h3>Rest Until Tomorrow</h3><p>Skip to Day ${s.day + 1}. Prices recover, rocks and deposits regrow.</p></div><button class="sbtn" data-act="rest">REST</button></div>
-      <div class="card"><div><h3>Pilot Record</h3><p>Rank <b>${RANK_NAMES[r]}</b> · Net worth ◈ ${fmt(netWorth(s))}<br>Mined ${s.stats.mined} · Trades ${s.stats.trades} · Contracts ${s.stats.contracts} · Outlaws downed ${s.stats.kills} · Jumps ${s.stats.jumps}</p></div></div>
+      ${this.newsHTML()}
+      <div class="card"><div><h3>Rest Until Tomorrow</h3><p>Skip to Day ${s.day + 1}. Prices recover, rocks and deposits regrow, new events may appear.${restNote}</p></div><button class="sbtn" data-act="rest">REST</button></div>
+      <div class="card"><div><h3>Pilot Record</h3><p>Rank <b>${RANK_NAMES[r]}</b> · Net worth ◈ ${fmt(netWorth(s))}<br>Mined ${s.stats.mined} · Trades ${s.stats.trades} · Contracts ${s.stats.contracts} · Outlaws downed ${s.stats.kills} · Jumps ${s.stats.jumps}<br>Reputation: <b>${repSummary(s.rep)}</b></p></div></div>
       <p style="font:600 12px var(--font);opacity:.75">Outlaw raids grow from lone raiders to packs of 2–4 as your rank rises. Barriers and beams are your best insurance.</p>
     </div>`;
   }
@@ -571,7 +585,7 @@ export class UI {
   missionsHTML() {
     const g = this.g, s = g.state, p = g.player;
     const offers = offersFor(s, g.galaxy, s.systemId, pilotRank(s));
-    let h = `<div class="ms-head"><span>ACTIVE CONTRACTS ${s.missions.length}/${MAX_ACTIVE}</span><small>Free hold ${g.cargoFree()}/${p.stats.cargo}</small></div>`;
+    let h = `<div class="ms-head"><span>ACTIVE CONTRACTS ${s.missions.length}/${MAX_ACTIVE}</span><small>Free hold ${g.cargoFree()}/${p.stats.cargo}${repTier(s.rep).pay ? ` · ${repTier(s.rep).name}: pay ${repTier(s.rep).pay > 0 ? '+' : ''}${Math.round(repTier(s.rep).pay * 100)}%` : ''}</small></div>`;
     h += s.missions.length ? `<div class="cards">${s.missions.map((m) => this.missionCard(m, true)).join('')}</div>` : '<p class="ms-empty">No active contracts — pick one from the board below.</p>';
     h += `<div class="ms-head" style="margin-top:14px"><span>CONTRACT BOARD · ${g.world.station.name.toUpperCase()}</span><small>New offers each day</small></div>`;
     h += offers.length ? `<div class="cards">${offers.map((o) => this.missionCard(o, false)).join('')}</div>` : '<p class="ms-empty">The board is empty. Check back tomorrow.</p>';
@@ -652,7 +666,7 @@ export class UI {
       }
     }
     else if (act === 'repair') {
-      const missing = Math.ceil(p.maxHp - p.hp); const cost = Math.ceil(missing * 1.5 * HULLS[p.hullId].priceMul);
+      const cost = this.repairCost();
       if (s.credits >= cost) { s.credits -= cost; p.hp = p.maxHp; p.shield = p.maxShield; g.audio.play('click', { vol: 0.6 }); }
     } else if (act === 'missiles') {
       const need = p.stats.mslCap - p.missiles; const cost = need * 60;
@@ -718,7 +732,8 @@ export class UI {
       const dest = dep.pos.clone().sub(pl.pos).normalize().multiplyScalar(100).add(dep.pos);
       items.push({ kind: 'planet', pos: pl.pos, dest, name: pl.data.name, color: `rgb(${pl.data.pal[1].map((x) => Math.round(x * 255)).join(',')})`, r: 4, ring: pl.radius, arrive: 45, deposit: dep });
     });
-    Wd.derelicts.forEach((d) => items.push({ kind: 'derelict', pos: d.pos, name: d.name, color: '#ffb07a', r: 5, arrive: 120 }));
+    Wd.derelicts.forEach((d) => { if (!d.occupied) items.push({ kind: 'derelict', pos: d.pos, name: d.name, color: '#ffb07a', r: 5, arrive: 120 }); });
+    items.push(...g.events.mapItems());
     return items;
   }
   drawMap() {
@@ -748,17 +763,18 @@ export class UI {
     ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(sx, sy, glowR, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = 'rgba(239,230,210,.12)';
     for (const pl of g.world.planets) { const d = Math.hypot(pl.pos.x, pl.pos.z) * s; ctx.beginPath(); ctx.arc(sx, sy, d, 0, Math.PI * 2); ctx.stroke(); }
-    const PRI = { station: 5, gate: 4, planet: 3, field: 2, derelict: 1 };
+    const PRI = { event: 6, station: 5, gate: 4, planet: 3, field: 2, derelict: 1 };
     const labels = [];
     for (const it of this.systemItems()) {
       const [x, y] = P(it.pos);
       const rad = Math.max(it.r, (it.ring || 0) * s);
-      if (it.ring) { ctx.strokeStyle = it.color; ctx.globalAlpha = it.kind === 'field' ? 0.55 : 1; ctx.lineWidth = 2; ctx.setLineDash(it.kind === 'field' ? [3, 3] : []); ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); if (it.kind === 'planet') { ctx.fillStyle = it.color; ctx.fill(); } ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }
+      if (it.kind === 'field' && it.field.surge) { ctx.fillStyle = 'rgba(200,245,106,.18)'; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill(); }
+      if (it.ring) { ctx.strokeStyle = it.kind === 'field' && it.field.surge ? '#c8f56a' : it.color; ctx.globalAlpha = it.kind === 'field' && !it.field.surge ? 0.55 : 1; ctx.lineWidth = 2; ctx.setLineDash(it.kind === 'field' ? [3, 3] : []); ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); if (it.kind === 'planet') { ctx.fillStyle = it.color; ctx.fill(); } ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }
       else { ctx.fillStyle = it.color; ctx.strokeStyle = '#141826'; ctx.lineWidth = 2; ctx.beginPath(); if (it.kind === 'gate') ctx.arc(x, y, it.r, 0, Math.PI * 2); else ctx.rect(x - it.r, y - it.r, it.r * 2, it.r * 2); ctx.fill(); ctx.stroke(); }
       const sel = this.mapSel && this.mapSel.name === it.name;
       if (sel) { ctx.strokeStyle = '#f0703c'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, rad + 7, 0, Math.PI * 2); ctx.stroke(); }
       const ir = Math.min(rad, 12);
-      labels.push({ x, y, gap: Math.min(rad, 40) + 5, lines: [it.name], font: '700 12px system-ui, sans-serif', lh: 14, color: sel ? '#f0703c' : '#efe6d2', pri: sel ? 99 : PRI[it.kind], force: sel,
+      labels.push({ x, y, gap: Math.min(rad, 40) + 5, lines: [it.kind === 'field' && it.field.surge ? `✦ ${it.name}` : it.kind === 'event' ? `${eventIcon(it.ev).ch} ${it.name}` : it.name], font: '700 12px system-ui, sans-serif', lh: 14, color: sel ? '#f0703c' : '#efe6d2', pri: sel ? 99 : PRI[it.kind], force: sel,
         blocks: [{ x: x - ir, y: y - ir, w: ir * 2, h: ir * 2 }] });
     }
     for (const t of g.traders) { const [x, y] = P(t.pos); ctx.fillStyle = '#f2d36b'; ctx.fillRect(x - 3, y - 3, 6, 6); }
@@ -903,6 +919,18 @@ export class UI {
         color: sel ? '#f0703c' : '#efe6d2', color2: known ? 'rgba(239,230,210,.85)' : 'rgba(239,230,210,.5)', pri: sel ? 99 : s.id === cur ? 50 : 10, force: sel || s.id === cur,
         blocks: [{ x: x - br, y: y - br, w: br * 2, h: br * 2 }] });
     }
+    // sector event icons under each system
+    const evBy = new Map();
+    for (const e of liveEvents(g.state)) { if (!evBy.has(e.sys)) evBy.set(e.sys, []); evBy.get(e.sys).push(e); }
+    ctx.font = '900 15px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const [id, evs] of evBy) {
+      const [x, y] = P(S[id]);
+      evs.forEach((e, k) => {
+        const ic = eventIcon(e), ex = x - 14 - k * 16, ey = y + 15;
+        ctx.lineWidth = 3; ctx.strokeStyle = '#141826'; ctx.strokeText(ic.ch, ex, ey); ctx.fillStyle = ic.col; ctx.fillText(ic.ch, ex, ey);
+        labels.push({ x: ex, y: ey, gap: 0, lines: [], pri: 0, blocks: [{ x: ex - 8, y: ey - 8, w: 16, h: 16 }] });
+      });
+    }
     // gold stars on systems with contract drop-offs
     const dests = new Set(g.state.missions.map((m) => m.dest.sys));
     ctx.font = '900 18px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -944,6 +972,8 @@ export class UI {
       if (sel.kind === 'planet' && sel.deposit) extra = `<p>Surface deposit: <b>${COMM[sel.deposit.ore].name}</b> (${Math.round(sel.deposit.amount)} units). Autopilot parks you in low orbit above it, ready to drill.</p>`;
       if (sel.kind === 'station') extra = '<p>Safe harbor: market, upgrades, shipyard, repairs.</p>';
       if (sel.kind === 'derelict') extra = '<p>Abandoned hulk. Hold SALVAGE nearby for credits & parts. Restocks every 3 days.</p>';
+      if (sel.kind === 'field' && sel.field.surge) extra += '<p style="color:#4f7a10"><b>✦ Lumenite surge today:</b> far higher chance of Lumenite from every rock here.</p>';
+      if (sel.kind === 'event') { const d = describe(sel.ev, g.galaxy, g.state, g.player.stats.sensorLvl); extra = `<p>${d.line}</p>${sel.ev.type === 'distress' ? '<p>Fly alongside and hold ASSIST to patch the ship up.</p>' : '<p>Approach and the base launches its guards. Destroy the base itself for the loot.</p>'}`; }
       const d = (sel.dest || sel.pos).distanceTo(g.player.pos);
       const here = g.state.missions.filter((m) => m.dest.sys === g.state.systemId && ((sel.kind === 'station' && m.dest.kind === 'station') || (sel.kind === 'planet' && m.dest.kind === 'planet' && g.world.deposits[m.dest.planet] === sel.deposit)));
       const ms = here.length ? `<p style="color:#9a6a00"><b>★ Contract drop-off:</b> ${here.map((m) => m.title).join('; ')}</p>` : '';
@@ -964,7 +994,8 @@ export class UI {
       const btn = s.id === g.state.systemId ? '<p><b>You are here.</b></p>' : `<button class="pbtn primary" data-act="route">PLOT ROUTE · ${jumps} JUMP${jumps > 1 ? 'S' : ''}</button>`;
       const there = g.state.missions.filter((m) => m.dest.sys === s.id);
       const ms = there.length ? `<p style="color:#9a6a00"><b>★ Contracts here:</b> ${there.map((m) => `${m.title} → ${m.dest.name} (due Day ${m.deadline})`).join('; ')}</p>` : '';
-      box.innerHTML = `<h4>${s.name}</h4><p>${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * 100)}%/day</p>${ms}${rows}${btn}`;
+      const evs = liveEvents(g.state).filter((e) => e.sys === s.id).map((e) => { const d = describe(e, g.galaxy, g.state, g.player.stats.sensorLvl); return `<p><b style="color:${d.col}">${d.ch}</b> <b>${d.title}:</b> ${d.line}</p>`; }).join('');
+      box.innerHTML = `<h4>${s.name}</h4><p>${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * 100)}%/day</p>${evs}${ms}${rows}${btn}`;
     }
   }
   mapAction(act) {

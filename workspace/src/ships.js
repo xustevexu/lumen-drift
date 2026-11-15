@@ -386,6 +386,48 @@ export function buildDerelict(seed) {
   return { group: g, lamp, glow };
 }
 
+// Pirate base: a captured hulk wrapped in an armour ring with turret pods, stolen containers and red lights.
+// Returned in ship-template form so it can be a (stationary) Ship with a barrier and hit points.
+let PIRATE_BASE = null;
+export function buildPirateBaseTemplate() {
+  if (PIRATE_BASE) return PIRATE_BASE;
+  mats();
+  const g = new THREE.Group(); const muzzles = [];
+  add(g, lathe([[0, 22], [6, 20], [10, 12], [11, -10], [8, -18], [0, -21]], 28, 1, 1), M.rust, 0, 0, 0, 0.12, 0, 0.08);
+  add(g, rbox(14, 8, 18, 1.5), M.dark, 0, 9, -2);
+  add(g, new THREE.TorusGeometry(26, 2.4, 10, 48), M.gunmetal, 0, 0, 0, Math.PI / 2, 0, 0);
+  add(g, new THREE.TorusGeometry(26.3, 0.55, 8, 64), M.trimRed, 0, 2.2, 0, Math.PI / 2, 0, 0);
+  add(g, new THREE.TorusGeometry(26.3, 0.55, 8, 64), M.trimRed, 0, -2.2, 0, Math.PI / 2, 0, 0);
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 2 + Math.PI / 4;
+    add(g, rbox(17, 2.2, 3.2, 0.4), M.dark, Math.cos(a) * 17, 0, Math.sin(a) * 17, 0, -a, 0);
+  }
+  const barrel = lathe([[0, 6], [0.35, 5.6], [0.5, 0], [0.9, -0.6], [0, -0.6]], 12);
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    const x = Math.cos(a) * 26, z = Math.sin(a) * 26, y = i % 2 ? -3.6 : 3.6;
+    add(g, new THREE.SphereGeometry(2.6, 16, 10), M.gunmetal, x, y, z);
+    // barrels point outward and slightly up/down
+    const b = add(g, barrel, M.grey, x, y, z);
+    b.lookAt(x * 2, y * 3, z * 2); b.rotateX(Math.PI / 2);
+    const tip = new THREE.Vector3(x, y, z).add(new THREE.Vector3(x, y * 0.6, z).normalize().multiplyScalar(6));
+    muzzles.push(tip);
+  }
+  // stolen cargo containers bolted to the hull
+  const cont = [M.orangePaint, M.ochre, M.teal];
+  for (let i = 0; i < 6; i++) add(g, rbox(4, 4, 9, 0.4), cont[i % 3], (i % 2 ? 1 : -1) * 13, -8 + (i % 3) * 5, -6 + Math.floor(i / 2) * 2, 0, 0.3 * i, 0);
+  // antenna spikes + red warning lights
+  const lightMat = new THREE.SpriteMaterial({ map: softTexture(), color: new THREE.Color(1.0, 0.18, 0.12).multiplyScalar(2.4), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+  for (const [x, y, z, h] of [[0, 30, 0, 14], [4, -28, 2, 10], [-6, 22, 5, 8]]) {
+    add(g, new THREE.CylinderGeometry(0.25, 0.6, h, 8), M.grey, x, y - Math.sign(y) * h / 2, z);
+    const sp = new THREE.Sprite(lightMat); sp.position.set(x, y, z); sp.scale.setScalar(6); g.add(sp);
+  }
+  for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; const sp = new THREE.Sprite(lightMat); sp.position.set(Math.cos(a) * 28.5, 0, Math.sin(a) * 28.5); sp.scale.setScalar(4); g.add(sp); }
+  const box = new THREE.Box3().setFromObject(g);
+  PIRATE_BASE = { g, engines: [], muzzles, box };
+  return PIRATE_BASE;
+}
+
 export function buildCrate() {
   mats();
   const g = new THREE.Group();

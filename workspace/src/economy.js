@@ -12,6 +12,7 @@ export function newState(seed) {
     derelictLooted: {},
     stats: { earned: 0, mined: 0, kills: 0, trades: 0, jumps: 0, contracts: 0 },
     missions: [], offers: {},
+    events: { day: 0, list: [] }, rep: 0,
     tutorial: { mined: false, docked: false, sold: false },
     sound: true, quality: 'high',
   };
@@ -35,14 +36,16 @@ export class Economy {
   mult(sysId, cid) { return ECONOMIES[this.sys(sysId).eco].mult[cid]; }
   sells(sys, cid) { return ECONOMIES[sys.eco].mult[cid] < 1.0; }
   // price the station PAYS the player
+  // sector events (blight, glut, colony rush...) scale prices; 1 when nothing is happening
+  eventMult(sysId, cid) { return priceMult(this.state, sysId, cid); }
   sellPrice(sysId, cid) {
     const m = this.state.market[sysId];
-    return Math.max(1, Math.round(COMM[cid].base * this.mult(sysId, cid) * m.drift[cid] * 0.97 * (1 - 0.32 * Math.min(1, Math.max(0, m.pressure[cid])))));
+    return Math.max(1, Math.round(COMM[cid].base * this.mult(sysId, cid) * this.eventMult(sysId, cid) * m.drift[cid] * 0.97 * (1 - 0.32 * Math.min(1, Math.max(0, m.pressure[cid])))));
   }
   // price the player PAYS the station
   buyPrice(sysId, cid) {
     const m = this.state.market[sysId];
-    return Math.max(1, Math.round(COMM[cid].base * this.mult(sysId, cid) * m.drift[cid] * 1.05 * (1 + 0.2 * Math.max(0, -m.pressure[cid]))));
+    return Math.max(1, Math.round(COMM[cid].base * this.mult(sysId, cid) * this.eventMult(sysId, cid) * m.drift[cid] * 1.05 * (1 + 0.2 * Math.max(0, -m.pressure[cid]))));
   }
   stock(sysId, cid) { return this.state.market[sysId].stock[cid]; }
   canBuy(sysId, cid) { return this.sells(this.sys(sysId), cid); }
@@ -83,6 +86,18 @@ export class Economy {
       }
     }
   }
+}
+
+// Market events: full effect in the origin system, 70% elsewhere for sector-wide shocks.
+export function priceMult(state, sysId, cid) {
+  const ev = state.events; if (!ev || !ev.list.length) return 1;
+  let m = 1;
+  for (const e of ev.list) {
+    if (e.type !== 'market' || e.status !== 'active' || state.day < e.start || state.day > e.end) continue;
+    const f = e.mult[cid]; if (!f) continue;
+    if (e.sys === sysId) m *= f; else if (e.scope === 'all') m *= 1 + (f - 1) * 0.7;
+  }
+  return m;
 }
 
 export function shipValue(ship) {
