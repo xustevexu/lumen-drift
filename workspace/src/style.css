@@ -468,3 +468,10 @@ body:has(#dialog:not(.hidden)) #comm { display: none; }
 button.origin { width: 100%; text-align: left; font: inherit; color: var(--ink); cursor: pointer; transition: transform 90ms ease, border-color 90ms ease, background 120ms; }
 button.origin:hover, button.origin.gp-focus { border-color: var(--warm); background: #2a3550; transform: translate(-1px, -1px); }
 button.origin:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
+/* journal */
+.journal { max-height: 62vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.journal .jr { border: 2px solid var(--line); background: #222b3e; box-shadow: 2px 2px 0 var(--shadow); padding: 6px 8px; font: 600 12.5px/1.35 var(--font); }
+.journal .jr p { margin: 3px 0 4px; }
+.journal .jr small { opacity: .7; }
+.journal .jr.story { border-color: #6b4fa0; background: #2a2340; }
+#dialogBox:has(.journal) { width: min(560px, 94vw); }

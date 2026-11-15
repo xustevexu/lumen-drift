@@ -247,7 +247,7 @@ export class Story {
   }
   // early tips, once per career (older saves get them once too)
   tips() {
-    setTimeout(() => this.comm('wick', `Missed something? Every message, mine included, is saved. To read them again, ${this.howTo('log')}.`, { once: 'tip-log' }), 9000);
+    setTimeout(() => this.comm('wick', `Missed something? Every message, mine included, is saved. To read them again, ${this.howTo('log')}. The JOURNAL in that same menu tracks your active contracts and story goals.`, { once: 'tip-log' }), 9000);
     setTimeout(() => this.comm('wick', `Your map shows this system and the whole galaxy: stations, fields, gates, events. To open it, ${this.howTo('map')}. Pick anything on it to set a course.`, { once: 'tip-map' }), 40000);
   }
   // first moments of a new career

@@ -129,6 +129,7 @@ export class UI {
         if (k === 't') this.g.cycleTarget();
         if (k === 'c') this.g.setCruise(!this.g.player.cruise);
         if (k === 'm') this.openMap();
+        if (k === 'j') { this.g.paused = true; this.openJournal(true); }
         if (k === 'r') inp.throttle = clamp(inp.throttle + 0.25, 0, 1);
         if (k === 'f') inp.throttle = clamp(inp.throttle - 0.25, 0, 1);
         if (k === 'e') { const a = this.g.currentAction; if (a) { if (a.hold) inp.mine = true; else this.g.doAction(a); } }
@@ -396,6 +397,7 @@ export class UI {
     $('mapInfo').addEventListener('click', (e) => { const b = e.target.closest('button[data-act]'); if (b) this.mapAction(b.dataset.act); });
     $('btnResume').addEventListener('click', () => this.togglePause());
     $('btnLog').addEventListener('click', () => this.openLog());
+    $('btnJournal').addEventListener('click', () => this.openJournal());
     $('btnQuit').addEventListener('click', () => {
       this.dialog('<div class="ov-title">QUIT TO TITLE?</div><p>Your game is saved first. Press CONTINUE on the title screen to pick up where you left off.</p>', [
         { label: 'SAVE & QUIT', primary: true, fn: () => { this.g.save(); location.reload(); } }, { label: 'CANCEL', fn: () => $('pause').classList.remove('hidden') }]);
@@ -416,6 +418,35 @@ export class UI {
     const rows = L.map((e) => `<p class="${e.k || ''}"><small>Day ${e.d} ${e.t}</small>${e.m.replace(/</g, '&lt;')}</p>`).join('') || '<p>No messages yet.</p>';
     $('pause').classList.add('hidden');
     this.dialog(`<div class="ov-title">MESSAGE LOG</div><div class="msglog">${rows}</div>`, [{ label: 'BACK', primary: true, fn: () => $('pause').classList.remove('hidden') }]);
+  }
+  // Journal: everything you're in the middle of, with a SET COURSE for each
+  openJournal(fromFlight = false) {
+    const g = this.g, s = g.state, sid = s.systemId, dist = jumpsFrom(g.galaxy, sid), rows = [], acts = [];
+    const btn = (label, fn) => { acts.push(fn); return `<button class="sbtn" data-j="${acts.length - 1}">${label}</button>`; };
+    const where = (sys) => sys === sid ? 'this system' : `${g.galaxy.systems[sys].name}, ${dist[sys]} jump${dist[sys] === 1 ? '' : 's'}`;
+    const A = s.story.arc;
+    if (A && !A.done && A.stage === 'go') rows.push(`<div class="jr story"><b>📖 ${g.arcs.cardHTML().match(/📖 ([^<]*)/)[1]}</b><p>${(g.arcs.heir && s.story.origin === 'heir' && g.arcs.heir.goalText()) || A.goal || ''}</p>${A.target != null && A.target !== sid ? btn('SET COURSE', () => g.arcs.courseTo()) : ''}</div>`);
+    const ms = s.missions;
+    rows.push(`<div class="ms-head"><span>CONTRACTS ${ms.length}/${MAX_ACTIVE}</span></div>`);
+    if (!ms.length) rows.push('<p class="ms-empty">No active contracts. Pick some up from the Contracts board at any station.</p>');
+    for (const m of ms) {
+      const left = m.deadline - s.day, due = left < 0 ? '<b style="color:#ff8a5c">OVERDUE</b>' : left === 0 ? '<b style="color:#ff8a5c">due today</b>' : `due Day ${m.deadline} (${left} day${left === 1 ? '' : 's'} left)`;
+      const extra = m.type === 'supply' ? ` · in hold ${g.player.cargo[m.commodity] || 0}/${m.qty} ${COMM[m.commodity].name}${m.ore ? `, mined ${m.oreMined || 0}/${m.oreQty} ${COMM[m.ore].name}` : ''}` : '';
+      rows.push(`<div class="jr"><b>${m.title}</b> <small>for ${m.client}</small><p>→ ${m.dest.name} (${where(m.dest.sys)}) · ${due} · pays <b>◈${fmt(m.reward)}</b>${extra}</p>${btn('SET COURSE', () => g.missionCourse(m))}</div>`);
+    }
+    const other = [];
+    if (s.story.debt > 0) other.push(`<div class="jr"><b>📒 Red Wake marker</b><p>You owe ${s.story.debtRate ? 'Silas Marrow' : 'Vex Tannery'} <b>◈${fmt(s.story.debt)}</b>. Pay at any Fringe station (Services).</p></div>`);
+    const SA = s.siege.active;
+    if (SA && SA.phase !== 'done') other.push(`<div class="jr"><b>⚔ Siege</b><p>${g.siege.newsLine()}</p>${SA.target.sys !== sid ? btn('SET COURSE', () => g.siege.courseTo()) : ''}</div>`);
+    for (const o of s.outposts) if (o.raid && o.raid.phase !== 'pending') other.push(`<div class="jr"><b>⚠ Raid on ${o.name}</b><p>${where(o.sys)}</p>${btn('SET COURSE', () => g.outposts.courseTo(o))}</div>`);
+    if (s.course) other.push(`<div class="jr"><b>🧭 Current course</b><p>${s.course.name}</p>${btn('CLEAR COURSE', () => g.cancelCourse())}</div>`);
+    if (other.length) rows.push('<div class="ms-head"><span>ALSO ON YOUR PLATE</span></div>', ...other);
+    if (!fromFlight) $('pause').classList.add('hidden');
+    this.dialog(`<div class="ov-title">JOURNAL</div><div class="journal">${rows.join('')}</div>`, [{ label: 'BACK', primary: true, fn: () => { if (fromFlight) g.paused = false; else $('pause').classList.remove('hidden'); } }]);
+    for (const b of $('dialogBox').querySelectorAll('button[data-j]')) b.addEventListener('click', () => {
+      $('dialog').classList.add('hidden'); g.paused = false; if (!$('pause').classList.contains('hidden')) this.togglePause();
+      acts[Number(b.dataset.j)](); this.closeMap && 0;
+    });
   }
   togglePause() {
     const el = $('pause'); const open = el.classList.contains('hidden');
