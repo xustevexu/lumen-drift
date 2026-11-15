@@ -421,6 +421,7 @@ body.gamepad:has(.overlay:not(.hidden)) #hud [data-pad]::after { display: none; 
 .intro-pic { align-self: center; width: 132px; height: 132px; object-fit: cover; border: 3px solid var(--warm); box-shadow: 4px 4px 0 #000; opacity: 0; animation: introLine 1.2s ease-out forwards; }
 #comm .comm-pic img.portrait { display: block; width: 64px; height: 64px; object-fit: cover; border: 2px solid var(--ink); }
 .arc-head { display: flex; gap: 12px; align-items: center; }
+.arc-head svg { flex: none; border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); }
 .arc-head img { width: 72px; height: 72px; object-fit: cover; border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); flex: none; }
 .arc-head small { font: 900 10.5px var(--font); letter-spacing: 1px; opacity: .65; }
 .card.story { border-color: #6b4fa0; background: #f3ecfa; }

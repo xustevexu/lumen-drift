@@ -1186,6 +1186,7 @@ export class Game {
     this.outposts.newDay(this.state.day);
     this.siege.newDay(this.state.day);
     this.fleet.newDay(this.state.day);
+    this.arcs.newDay();
     this.ui.toast(`Day ${this.state.day} — markets updated`, 'info', 2.5);
     this.checkDeadlines();
   }

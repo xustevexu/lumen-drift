@@ -809,7 +809,7 @@ export class UI {
       else this.toast('Not enough credits or cargo space', 'warn', 2);
     } else if (act === 'refuel') { g.refuel(false);
     } else if (act === 'paydebt') {
-      const n = g.story.payDebt(Number(arg)); if (n) { g.audio.play('coins', { vol: 0.7 }); this.toast(`Paid Vex ◈${fmt(n)}`, 'good', 2.5); g.save(); }
+      const n = g.story.payDebt(Number(arg)); if (n) { g.audio.play('coins', { vol: 0.7 }); this.toast(`Marker payment ◈${fmt(n)}`, 'good', 2.5); g.save(); }
     } else if (act === 'arccourse') { g.arcs.courseTo(); return;
     } else if (act === 'license') {
       if (g.accord.buyLicense()) { g.audio.play('coins', { vol: 0.8 }); this.toast('✓ Accord Pilot License granted', 'good', 4); }

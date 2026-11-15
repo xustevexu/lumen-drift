@@ -4,18 +4,21 @@ import * as THREE from 'three';
 import { fmt } from './rng.js';
 import { pilotRank } from './economy.js';
 import { jumpsFrom } from './missions.js';
-import { isAccordEco, ACCORD } from './story.js';
+import { isAccordEco, ACCORD, portraitSVG } from './story.js';
+import { DebtorArc, DEBTOR_INFO, DEBTOR_ENDINGS } from './arcs_debtor.js';
 
 const _v = new THREE.Vector3();
 
 export const ARC_INFO = {
   deserter: { title: 'The Cipher Key', chapters: ['Old Colors', 'Static', 'Deniable', 'The Middle Man', 'The Hearing', 'Coming Home'] },
+  debtor: DEBTOR_INFO,
 };
 export const ENDINGS = {
   accord: { name: 'Reinstated', title: 'Commander (Reinstated)', line: 'You gave the evidence to Hale. Mercer was arrested, you were pardoned and given an Accord Pilot License, and the Accord treats you with respect.' },
   fringe: { name: 'Hero of the Fringe', title: 'Hero of the Fringe', line: "You gave the evidence to the Free Settlers. The Fringe will never forget it; the Accord will never forgive it." },
   open: { name: 'The Whistleblower', title: 'The Whistleblower', line: 'You broadcast everything. The Accord was forced to reform: tariffs halved, Patrols now fly the frontier too, and the Red Wake lost its friends in high places.' },
   bought: { name: 'Paid Off', title: 'Mercenary', line: "You took Mercer's money and burned the evidence. You're rich. Nobody on either side quite trusts you any more." },
+  ...DEBTOR_ENDINGS,
 };
 
 export function normalizeArc(state) {
@@ -29,11 +32,14 @@ export function raidMult(state, eco) {
   const e = arcEnding(state);
   if (e === 'open') return 0.85;
   if (e === 'fringe' && !isAccordEco(eco)) return 0.8;
+  if (e === 'partner' || e === 'enforcer') return 0.85;
   return 1;
 }
 
 export class ArcManager {
-  constructor(game) { this.g = game; }
+  constructor(game) { this.g = game; this.debtor = new DebtorArc(this); }
+  pic(id) { return portraitSVG(id, 72); }
+  newDay() { const a = this.arc; if (a && this.origin === 'debtor') this.debtor.newDay(); }
   get state() { return this.g.state; }
   get arc() { return this.state.story && this.state.story.arc; }
   get origin() { return this.state.story && this.state.story.origin; }
@@ -49,7 +55,9 @@ export class ArcManager {
 
   // checked every second from Story.update
   update() {
-    const a = this.arc; if (!a || a.done || this.origin !== 'deserter') return;
+    const a = this.arc; if (!a || a.done) return;
+    if (this.origin === 'debtor') { this.debtor.update(); return; }
+    if (this.origin !== 'deserter') return;
     const g = this.g, s = this.state;
     if (a.stage === 'wait') {
       if (s.day < (a.at || 0)) return;
@@ -91,17 +99,19 @@ export class ArcManager {
   }
 
   onEnterSystem(initial) {
-    const a = this.arc; if (!a || a.done || this.origin !== 'deserter') return;
-    if (a.ch === 3 && a.stage === 'go') { a.flags.spawned = false; if (!initial && a.flags.armed) setTimeout(() => this.spawnSquad(), 2500); }
+    const a = this.arc; if (!a || a.done) return;
+    if (this.origin === 'debtor') { this.debtor.onEnterSystem(initial); return; }
+    if (this.origin !== 'deserter') return;
+    if (a.ch === 3 && a.stage === 'go') { a.flags.spawned = false; if (!initial && a.flags.armed) setTimeout(() => this.spawnSquad({ n: 3, name: 'Unmarked', tough: 1.15, color: 0x6f9fff, toast: '⚠ Three unmarked ships dropped out of warp. They are here for you.', speaker: 'wick', line: 'No transponders, but those are Accord-pattern drives. Patrol hardware flying as pirates. Take them down and we can pull their logs.' }), 2500); }
   }
-  spawnSquad() {
+  spawnSquad(o) {
     const g = this.g, a = this.arc; if (!a || a.ch !== 3 || a.flags.spawned || g.docked) return;
     a.flags.spawned = true;
     const p = g.player, dir = _v.set(Math.sin(p.yaw), 0, Math.cos(p.yaw)).multiplyScalar(1900);
     const rank = pilotRank(this.state);
-    g.spawnOutlaws({ n: 3, entry: p.pos.clone().add(dir), name: 'Unmarked', tough: 1.15 + rank * 0.08, burstColor: 0x6f9fff, toast: '⚠ Three unmarked ships dropped out of warp. They are here for you.' });
-    for (const o of g.outlaws) if (o.name.startsWith('Unmarked')) o.storyOf = 'arc';
-    setTimeout(() => this.comm('wick', 'No transponders, but those are Accord-pattern drives. Patrol hardware flying as pirates. Take them down and we can pull their logs.', 'warn'), 1200);
+    g.spawnOutlaws({ n: o.n, entry: p.pos.clone().add(dir), name: o.name, tough: o.tough + rank * 0.08, burstColor: o.color, toast: o.toast });
+    for (const x of g.outlaws) if (x.name.startsWith(o.name)) x.storyOf = 'arc';
+    setTimeout(() => this.comm(o.speaker, o.line, 'warn'), 1200);
   }
   completeCh3() {
     const a = this.arc, g = this.g; a.flags.armed = false;
@@ -111,7 +121,9 @@ export class ArcManager {
   }
 
   onDock() {
-    const a = this.arc; if (!a || a.done || a.stage !== 'go' || this.origin !== 'deserter') return;
+    const a = this.arc; if (!a || a.done || a.stage !== 'go') return;
+    if (this.origin === 'debtor') { this.debtor.onDock(); return; }
+    if (this.origin !== 'deserter') return;
     const g = this.g, s = this.state, sid = s.systemId, eco = g.sysInfo.eco, ui = g.ui;
     if (a.ch === 1 && sid === a.target) {
       ui.dialog(this.scene('ama', 'Old Colors', `<p>Elder Ama meets you in the station's market, between crates of seedlings and water filters.</p>
@@ -132,7 +144,7 @@ export class ArcManager {
     }
   }
   scene(id, title, body) {
-    return `<div class="arc-head"><img src="./portraits/${id}.jpg" alt=""><div><small>THE CIPHER KEY · CHAPTER ${this.arc.ch}</small><div class="ov-title">${title.toUpperCase()}</div></div></div>${body}`;
+    return `<div class="arc-head">${this.pic(id)}<div><small>${ARC_INFO[this.origin].title.toUpperCase()} · CHAPTER ${this.arc.ch}</small><div class="ov-title">${title.toUpperCase()}</div></div></div>${body}`;
   }
   vexScene() {
     const g = this.g, s = this.state, price = 6000;
@@ -217,7 +229,7 @@ export class ArcManager {
       open: `<p>Kask flips the switch and the evidence goes out on every relay in the lanes. Within the hour the news feeds catch fire.</p><p>"Well," Kask says, "you've upset everybody equally. That's the closest thing to justice we get out here."</p>`,
       bought: '<p>The credits arrive. The evidence goes into a star. Later, Vex sends you one line:</p><p>"Welcome to the real Fringe, pilot."</p>',
     }[end];
-    g.ui.dialog(`<div class="arc-head"><img src="./portraits/${speaker}.jpg" alt=""><div><small>THE CIPHER KEY · EPILOGUE</small><div class="ov-title">${E.name.toUpperCase()}</div></div></div>${text}<p><i>${E.line}</i></p><p><b>${reward}</b><br>Title earned: <b>${E.title}</b></p>`,
+    g.ui.dialog(`<div class="arc-head">${this.pic(speaker)}<div><small>THE CIPHER KEY · EPILOGUE</small><div class="ov-title">${E.name.toUpperCase()}</div></div></div>${text}<p><i>${E.line}</i></p><p><b>${reward}</b><br>Title earned: <b>${E.title}</b></p>`,
       [{ label: 'CONTINUE YOUR CAREER', primary: true }]);
     g.save();
   }

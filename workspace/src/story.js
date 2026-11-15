@@ -18,11 +18,13 @@ export const CAST = {
   vex: { name: 'Vex Tannery', role: 'Red Wake', color: '#ff4a3a', p: { bg: '#5a1d1d', skin: '#e0b48f', hair: '#c8331f', style: 'mohawk', outfit: '#2a2a33', trim: '#ff4a3a', acc: ['scar', 'earring'] } },
   ama: { name: 'Elder Ama Oyelaran', role: 'Free Settlers', color: '#f0703c', p: { bg: '#6b3a1e', skin: '#6b4430', hair: '#f0a03c', style: 'wrap', outfit: '#8a5a3a', trim: '#f0d36b', acc: [] } },
   solak: { name: 'Dr. Imre Solak', role: 'Lumen Institute', color: '#3fb8c8', p: { bg: '#174a52', skin: '#d8b896', hair: '#9aa0a8', style: 'short', outfit: '#f2f4f2', trim: '#3fb8c8', acc: ['glasses'] } },
+  marrow: { name: 'Silas Marrow', role: 'Red Wake', color: '#c8a03a', noArt: true, p: { bg: '#2a1414', skin: '#d8b090', hair: '#8a8a8a', style: 'short', outfit: '#141418', trim: '#c8a03a', acc: ['beard', 'scar'] } },
+  mercer: { name: 'Capt. Doran Mercer', role: 'Accord Patrol', color: '#6f9fff', noArt: true, p: { bg: '#1e2c50', skin: '#e0b896', hair: '#b8b0a0', style: 'short', outfit: '#1c2848', trim: '#c0c8d8', acc: [] } },
   kask: { name: 'Brodie Kask', role: 'Deepcore Union', color: '#d9a35a', p: { bg: '#4a3a22', skin: '#b98a66', hair: '#5a4632', style: 'bald', outfit: '#6a5a44', trim: '#d9a35a', acc: ['beard'] } },
 };
 
 export function portraitSVG(id, size = 64) {
-  if (CAST[id]) return `<img class="portrait" src="./portraits/${id}.jpg" width="${size}" height="${size}" alt="${CAST[id].name}">`;
+  if (CAST[id] && !CAST[id].noArt) return `<img class="portrait" src="./portraits/${id}.jpg" width="${size}" height="${size}" alt="${CAST[id].name}">`;
   const c = CAST[id]; const p = c.p;
   if (p.kind === 'ai') {
     return `<svg viewBox="0 0 64 64" width="${size}" height="${size}"><rect width="64" height="64" fill="#0d1424"/><circle cx="32" cy="32" r="22" fill="none" stroke="#58e8ff" stroke-width="2" opacity=".5"/>
@@ -239,16 +241,17 @@ export class Story {
     if (!st.debt || st.debt <= 0 || s.day < (st.debtCheck || 7)) return;
     st.debtCheck = s.day + 7;
     if ((st.debtWeekPaid || 0) <= 0) {
-      const add = Math.round(st.debt * 0.05); st.debt += add; this.g.factionChange('pirate', -2, true);
-      this.comm('vex', `Week's up and I didn't see a credit. Interest is ◈${fmt(add)}; you owe ◈${fmt(st.debt)} now. Pay at any Fringe station.`, { kind: 'warn' });
-    } else this.comm('vex', `◈${fmt(st.debtWeekPaid)} this week. Good. ◈${fmt(st.debt)} to go. Keep it up and we stay friends.`);
+      const add = Math.round(st.debt * (st.debtRate || 0.05)); st.debt += add; this.g.factionChange('pirate', -2, true);
+      const who = st.debtRate ? 'marrow' : 'vex';
+      this.comm(who, `Week's up and I didn't see a credit. Interest is ◈${fmt(add)}; you owe ◈${fmt(st.debt)} now. Pay at any Fringe station.`, { kind: 'warn' });
+    } else this.comm(st.debtRate ? 'marrow' : 'vex', `◈${fmt(st.debtWeekPaid)} this week. Good. ◈${fmt(st.debt)} to go. Keep it up and we stay friends.`);
     st.debtWeekPaid = 0;
   }
   payDebt(amount) {
     const s = this.state, st = s.story, n = Math.min(amount, st.debt, s.credits);
     if (n <= 0) return 0;
     s.credits -= n; st.debt -= n; st.debtWeekPaid = (st.debtWeekPaid || 0) + n;
-    if (st.debt <= 0) { st.debt = 0; this.g.factionChange('pirate', 6); this.comm('vex', "Paid in full. Huh. Didn't think you had it in you. Your marker's burned. If you ever want real work, you know where the Wake drinks.", { kind: 'good' }); }
+    if (st.debt <= 0) { st.debt = 0; this.g.factionChange('pirate', 6); this.comm(st.debtRate ? 'marrow' : 'vex', "Paid in full. Huh. Didn't think you had it in you. Your marker's burned. If you ever want real work, you know where the Wake drinks.", { kind: 'good' }); }
     return n;
   }
   debtHTML() {
@@ -256,7 +259,7 @@ export class Story {
     if (!st.debt || st.debt <= 0) return '';
     const fringe = !isAccordEco(g.sysInfo.eco), s = this.state;
     const btn = (n, label) => `<button class="sbtn buy" data-act="paydebt" data-arg="${n}" ${fringe && s.credits >= Math.min(n, st.debt) ? '' : 'disabled'}>${label}</button>`;
-    return `<div class="card news"><div><h3>Red Wake Marker</h3><p>You owe Vex Tannery <b>◈${fmt(st.debt)}</b>. Paid this week: ◈${fmt(st.debtWeekPaid || 0)}. ${fringe ? 'Vex has people at this station.' : 'Vex only collects at Fringe stations (Mining and Frontier systems).'} Miss a week and 5% interest is added.</p><p>${btn(1000, 'PAY ◈1,000')} ${btn(5000, 'PAY ◈5,000')} ${btn(st.debt, `PAY ALL ◈${fmt(st.debt)}`)}</p></div></div>`;
+    return `<div class="card news"><div><h3>Red Wake Marker</h3><p>You owe ${st.debtRate ? 'Silas Marrow' : 'Vex Tannery'} <b>◈${fmt(st.debt)}</b>. Paid this week: ◈${fmt(st.debtWeekPaid || 0)}. ${fringe ? 'The Wake has people at this station.' : 'The Wake only collects at Fringe stations (Mining and Frontier systems).'} Miss a week and ${Math.round((st.debtRate || 0.05) * 100)}% interest is added.</p><p>${btn(1000, 'PAY ◈1,000')} ${btn(5000, 'PAY ◈5,000')} ${btn(st.debt, `PAY ALL ◈${fmt(st.debt)}`)}</p></div></div>`;
   }
 }
 export { COMM, FACTIONS };
