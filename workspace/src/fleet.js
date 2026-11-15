@@ -156,8 +156,13 @@ export class FleetManager {
     let d = 0; for (const id of path) d += g.galaxy.systems[id].danger;
     const hullK = { wren: 1.2, mule: 1.0, kestrel: 0.6, bastion: 0.3 }[rec.hull];
     const ghost = (rec.uniques || []).includes('ghost') ? 0.5 : 1;
-    return Math.min(0.6, d * 0.45 * hullK * ghost * factionTier(standingWith(this.state, 'pirate')).raid);
+    return Math.min(0.6, d * 0.45 * hullK * ghost * this.armedMult(rec) * factionTier(standingWith(this.state, 'pirate')).raid);
   }
+  // a ship's own combat upgrades protect its trade runs: up to ~40% fewer raids when fully armed
+  combatLevels(rec) { const m = rec.mods || {}; return (m.barrier || 0) + (m.hull || 0) + (m.beam || 0) + (m.missile || 0); }
+  armedMult(rec) { return 1 - 0.034 * this.combatLevels(rec); }
+  // Barrier and Hull Plating make it less likely a raided ship is disabled and towed home
+  disableChance(rec) { const m = rec.mods || {}; return 0.2 * (1 - 0.06 * ((m.barrier || 0) + (m.hull || 0))); }
   assign(uid, b) {
     const s = this.state, rec = s.ships.find((x) => x.uid === uid), a = s.systemId;
     if (!rec || rec.uid === s.active || rec.route || a === b) return 'Not available';
@@ -196,7 +201,7 @@ export class FleetManager {
         if (Math.random() < this.legRisk(rec, from, to)) {
           s.credits -= cost; trade -= cost; R.earned -= cost;
           R.last = `raided on the way to ${g.galaxy.systems[to].name}: lost ${pick.qty} ${COMM[pick.cid].name} (−◈${fmt(cost)})`;
-          if (Math.random() < 0.2) { const fee = Math.round(HULLS[rec.hull].price * 0.08); s.credits -= fee; trade -= fee; rec.route = null; R.last += `; ship disabled and towed home (◈${fmt(fee)})`; }
+          if (Math.random() < this.disableChance(rec)) { const fee = Math.round(HULLS[rec.hull].price * 0.08); s.credits -= fee; trade -= fee; rec.route = null; R.last += `; ship disabled and towed home (◈${fmt(fee)})`; }
         } else {
           const gross = g.economy.sell(to, pick.cid, pick.qty) - cost;
           const profit = gross > 0 ? Math.round(gross * (1 - CREW_SHARE)) : gross; // the crew takes a share of good runs

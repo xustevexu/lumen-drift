@@ -677,7 +677,8 @@ export class UI {
       return { x, known, est, risk, days, perDay: known ? Math.round((est.perTrip - ROUTE_WAGE * days * 2) / (days * 2)) : null };
     }).sort((a, b) => (b.perDay ?? -1e9) - (a.perDay ?? -1e9));
     const rows = opts.map((o) => `<p style="margin:2px 0"><b>${o.x.name}</b> <small>(${ECONOMIES[o.x.eco].name}, ${o.days} day${o.days > 1 ? 's' : ''} each way, raid risk ~${o.risk}% per leg)</small><br><small>${o.known ? `Est. ${o.est.out ? `${COMM[o.est.out.cid].name} out` : 'empty out'}, ${o.est.back ? `${COMM[o.est.back.cid].name} back` : 'empty back'} · <b>◈${fmt(o.perDay)}/day</b> after wages` : 'No market intel yet: profit unknown'}</small></p>`).join('');
-    this.dialog(`<div class="ov-title">TRADE ROUTE · ${HULLS[rec.hull].name.toUpperCase()}</div><p>From <b>${g.sysInfo.name}</b>, hold ${cap}. Estimates use today's prices; markets move as your ship trades.</p>${rows}`,
+    const armed = Math.round((1 - g.fleet.armedMult(rec)) * 100);
+    this.dialog(`<div class="ov-title">TRADE ROUTE · ${HULLS[rec.hull].name.toUpperCase()}</div><p>From <b>${g.sysInfo.name}</b>, hold ${cap}. Estimates use today's prices; markets move as your ship trades.</p><p><small>${armed ? `This ship's combat upgrades cut its raid risk by ${armed}% and make a raid less likely to disable it.` : 'Combat upgrades on this ship (Barrier, Hull Plating, Beams, Missiles) would lower its raid risk.'}</small></p>${rows}`,
       [...opts.slice(0, 5).map((o) => ({ label: `${o.x.name}${o.perDay != null ? ` · ◈${fmt(o.perDay)}/day` : ' · ?'}`, primary: o === opts[0], fn: () => {
         const err = g.fleet.assign(uid, o.x.id);
         this.toast(err || `${HULLS[rec.hull].name} now trading ${g.sysInfo.name} ⇄ ${o.x.name}`, err ? 'warn' : 'good', 3.5); g.save(); this.renderStation();
