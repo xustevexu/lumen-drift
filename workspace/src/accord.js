@@ -161,7 +161,7 @@ export class AccordManager {
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 const PATROL_ENGAGE = ['Red Wake contact. Patrol engaging, keep clear of our fire.', 'Hostiles on scope. Moving to intercept.', "Outlaws in Accord space? Not on my watch."];
 const PATROL_CLEAN = ['Routine cargo scan complete. You\'re clean, pilot. Fly safe.', 'Scan complete, nothing flagged. Enjoy your stay in Accord space.', 'Hold checks out. Carry on.'];
-const PATROL_IDLE = ['All ships: Patrol sweep in progress. Report any red hulls on your scopes.', 'Reminder: unlicensed pilots pay the tariff on docking. Have a pleasant day.', "Traffic's light today. That's how we like it."];
+const PATROL_IDLE = ['All ships: Patrol sweep in progress. Red Wake contacts in this system will be engaged.', 'Reminder: unlicensed pilots pay the tariff on docking. Have a pleasant day.', "Traffic's light today. That's how we like it."];
 const TRADER_ACCORD = ['Nice quiet lane today. Love it when the Patrol is out.', 'Docking queue is backed up again. Tariffs, paperwork, the usual.', 'Grain prices are holding. Good season on the farms.', 'Heard the Institute is buying anything with a Lantern stamp on it.'];
 const TRADER_FRINGE = ['Keep your shields up out here, friend. No Patrol past the core.', "If you see red hulls, run. Don't play hero.", 'Fuel is cheap in the mining belts, everything else costs blood.', 'Deepcore pays cash, no questions. That\'s the Fringe for you.'];
 const FRINGE_OPEN = ['...anybody copy? Lost a hauler near the belt, red hulls everywhere...', 'Settlers\' market opens at dawn. Bring water filters if you have them.', "Union strike's over. Ore's moving again.", 'Somebody tell the Accord we can protect ourselves just fine.'];
