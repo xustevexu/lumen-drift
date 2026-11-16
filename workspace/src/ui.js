@@ -1,4 +1,6 @@
 import { unlocked, isAccordEco } from './story.js';
+// is map item `it` the current selection? (system items by key, galaxy items by system id)
+const sameSel = (sel, it) => !!sel && (sel.key != null ? sel.key === it.key : sel.sys != null ? sel.sys === it.sys : sel.name === it.name);
 import { licenseNeeds, LICENSE_PRICE } from './accord.js';
 import * as THREE from 'three';
 import { COMMODITIES, COMM, ECONOMIES, HULLS, HULL_ORDER, MODULES, MODULE_ORDER, modulePrice, statLine, emptyMods, computeStats, DAY_LENGTH } from './data.js';
@@ -1006,6 +1008,8 @@ export class UI {
     items.push(...g.events.mapItems());
     items.push(...g.outposts.mapItems());
     items.push(...g.explore.mapItems());
+    // a unique, stable key per item: names repeat (several wrecks per system), positions don't
+    for (const it of items) it.key = `${it.kind}:${Math.round(it.pos.x)}:${Math.round(it.pos.y)}:${Math.round(it.pos.z)}`;
     return items;
   }
   drawMap() {
@@ -1043,7 +1047,7 @@ export class UI {
       if (it.kind === 'field' && it.field.surge) { ctx.fillStyle = 'rgba(200,245,106,.18)'; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill(); }
       if (it.ring) { ctx.strokeStyle = it.kind === 'field' && it.field.surge ? '#c8f56a' : it.color; ctx.globalAlpha = it.kind === 'field' && !it.field.surge ? 0.55 : 1; ctx.lineWidth = 2; ctx.setLineDash(it.kind === 'field' ? [3, 3] : []); ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); if (it.kind === 'planet') { ctx.fillStyle = it.color; ctx.fill(); } ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }
       else { ctx.fillStyle = it.color; ctx.strokeStyle = '#141826'; ctx.lineWidth = 2; ctx.beginPath(); if (it.kind === 'gate') ctx.arc(x, y, it.r, 0, Math.PI * 2); else ctx.rect(x - it.r, y - it.r, it.r * 2, it.r * 2); ctx.fill(); ctx.stroke(); }
-      const sel = this.mapSel && this.mapSel.name === it.name;
+      const sel = sameSel(this.mapSel, it);
       if (sel) { ctx.strokeStyle = '#f0703c'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, rad + 7, 0, Math.PI * 2); ctx.stroke(); }
       const ir = Math.min(rad, 12);
       const dyy = it.pos.y - g.player.pos.y, altTxt = Math.abs(dyy) > 400 ? `${dyy > 0 ? '▲ above' : '▼ below'} ${this.dist(Math.abs(dyy))}` : null;

@@ -282,7 +282,8 @@ export class GamepadInput {
     const ui = this.ui, g = this.g, c = $('mapCanvas');
     if (this.focusEl) { this.focusEl.classList.remove('gp-focus'); this.focusEl = null; }
     const items = this.mapItems();
-    const cur = ui.mapSel && items.find((i) => i.sel.name === ui.mapSel.name);
+    const same = (i) => ui.mapSel && (ui.mapSel.key != null ? i.sel.key === ui.mapSel.key : ui.mapSel.sys != null ? i.sel.sys === ui.mapSel.sys : i.sel.name === ui.mapSel.name);
+    const cur = ui.mapSel && items.find(same);
     let from = cur;
     if (!from) {
       if (ui.mapTab === 'system') { const [x, y] = ui.sysProj(c.clientWidth, c.clientHeight)(g.player.pos); from = { x, y }; }
@@ -305,7 +306,7 @@ export class GamepadInput {
     // zoom toward the selection with the triggers, pan with the right stick
     const rt = S.val(B.RT), lt = S.val(B.LT);
     if (rt > 0.05 || lt > 0.05) {
-      let [zx, zy] = ui.mapCenter(); const sel = items.find((i) => ui.mapSel && i.sel.name === ui.mapSel.name);
+      let [zx, zy] = ui.mapCenter(); const sel = items.find(same);
       if (sel) { zx = sel.x; zy = sel.y; }
       ui.mapZoomAt(zx, zy, Math.exp((rt - lt) * 2.2 * S.dt));
     }
