@@ -154,8 +154,9 @@ export class GamepadInput {
       else if (this.owns[key]) { inp[key] = false; this.owns[key] = false; }
     };
     hold('fire', B.X); hold('boost', B.RB);
-    // A = context action: hold for mine/salvage, press for dock/jump/hail
-    if (S.hit(B.A)) {
+    // A = context action: hold for mine/salvage, press for dock/jump/hail (or acknowledge Wick's briefing)
+    if (S.hit(B.A) && g.story.ackPending) { g.story.ack(); }
+    else if (S.hit(B.A)) {
       const a = g.currentAction;
       if (a && a.hold) { inp.mine = true; this.owns.mine = true; }
       else if (a) { g.audio.play('click', { vol: 0.5 }); g.doAction(a); }

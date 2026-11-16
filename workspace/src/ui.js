@@ -124,6 +124,7 @@ export class UI {
       if (this.g.mode !== 'play') return;
       if (k === 'escape') { this.togglePause(); return; }
       if (this.modalOpen()) return;
+      if ((k === 'enter' || k === ' ') && this.g.story.ackPending) { e.preventDefault(); this.g.story.ack(); return; }
       if (!keys.has(k)) {
         if (k === ' ') inp.fire = true;
         if (k === 'shift') inp.boost = true;

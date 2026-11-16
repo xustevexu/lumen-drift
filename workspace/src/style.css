@@ -480,3 +480,8 @@ button.origin:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var
 .row:not(.head) { border: 1px solid var(--line); border-bottom: 1px solid var(--line); background: rgba(255,255,255,.025); margin-bottom: 4px; transition: background 100ms, border-color 100ms; }
 .row:not(.head):hover, .row:not(.head):active, body.gamepad .row:not(.head):has(.gp-focus) { background: #2a3550; border-color: var(--warm); box-shadow: inset 4px 0 0 var(--warm); }
 body.gamepad .row:not(.head):has(.gp-focus) .nm { color: #ffd2b8; }
+/* messages that wait for you (Wick's opening briefing) */
+#comm.ack { border-color: var(--warm); box-shadow: 4px 4px 0 var(--shadow), 0 0 0 2px rgba(240,112,60,.35); }
+#comm .comm-ok { margin-top: 6px; float: right; font-size: 12px; padding: 4px 12px; animation: okPulse 1.4s ease-in-out infinite; }
+#comm .comm-ok.hidden { display: none; }
+@keyframes okPulse { 50% { filter: brightness(1.25); } }

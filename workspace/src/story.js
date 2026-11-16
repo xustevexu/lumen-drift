@@ -149,7 +149,7 @@ export class Story {
   comm(id, text, opts = {}) {
     const s = this.state;
     if (opts.once) { if (s.story.said[opts.once]) return; s.story.said[opts.once] = 1; }
-    this.queue.push({ id, text, chatter: false });
+    this.queue.push({ id, text, chatter: false, ack: !!opts.ack });
     this.log(CAST[id].name, text, opts.kind || 'info');
   }
   // drop calm radio chatter that hasn't played yet (called when a fight starts)
@@ -173,13 +173,25 @@ export class Story {
     let el = document.getElementById('comm');
     if (!el) {
       el = document.createElement('div'); el.id = 'comm'; el.className = 'hidden';
-      el.innerHTML = '<div class="comm-pic"></div><div class="comm-body"><div class="comm-name"></div><div class="comm-text"></div></div>';
-      el.addEventListener('click', () => { this.t = 0; });
+      el.innerHTML = '<div class="comm-pic"></div><div class="comm-body"><div class="comm-name"></div><div class="comm-text"></div><button class="comm-ok sbtn buy hidden"></button></div>';
+      el.addEventListener('click', () => this.ack());
       // lives at the top of the HUD's top stack, so toasts and the target panel flow below it instead of overlapping
       const stack = document.getElementById('topStack');
       if (stack) stack.prepend(el); else document.body.appendChild(el);
     }
     return el;
+  }
+  // acknowledge the current message: the first press finishes the typing, the next one closes it
+  ack() {
+    const c = this.cur; if (!c) return;
+    if (c.shown < c.text.length) { c.shown = c.text.length; return; }
+    this.t = 0; c.ack = false;
+  }
+  get ackPending() { return !!(this.cur && this.cur.ack); }
+  okLabel() {
+    const pad = this.g.pad;
+    if (pad && pad.active && pad.layout) return `OK  ·  ${pad.layout.A}`;
+    return window.matchMedia && window.matchMedia('(pointer: coarse)').matches ? 'OK  ·  TAP' : 'OK  ·  ENTER';
   }
   updateComms(dt) {
     const el = this.el();
@@ -189,6 +201,10 @@ export class Story {
     if (this.cur) {
       this.cur.shown = Math.min(this.cur.text.length, this.cur.shown + dt * 55); // typewriter
       el.querySelector('.comm-text').textContent = this.cur.text.slice(0, Math.floor(this.cur.shown));
+      const ok = el.querySelector('.comm-ok');
+      ok.classList.toggle('hidden', !this.cur.ack); if (this.cur.ack) ok.textContent = this.okLabel();
+      el.classList.toggle('ack', !!this.cur.ack);
+      if (this.cur.ack) return; // waits for the player
       this.t -= dt;
       if (this.t <= 0) { this.cur = null; el.classList.add('hidden'); }
       return;
@@ -247,15 +263,15 @@ export class Story {
   }
   // early tips, once per career (older saves get them once too)
   tips() {
-    setTimeout(() => this.comm('wick', `Missed something? Every message, mine included, is saved. To read them again, ${this.howTo('log')}. The JOURNAL in that same menu tracks your active contracts and story goals.`, { once: 'tip-log' }), 9000);
-    setTimeout(() => this.comm('wick', `Your map shows this system and the whole galaxy: stations, fields, gates, events. To open it, ${this.howTo('map')}. Pick anything on it to set a course.`, { once: 'tip-map' }), 40000);
+    // one briefing that waits for you: the map, the message log and the journal
+    setTimeout(() => { this.state.story.said['tip-map'] = 1; this.comm('wick', `Two things worth knowing. Your map shows this system and the whole galaxy; pick anything on it to set a course. To open it, ${this.howTo('map')}. And every message, mine included, is saved: to read them again, ${this.howTo('log')}. The JOURNAL in that same menu tracks your contracts and story goals.`, { once: 'tip-log', ack: true }); }, 2500);
   }
   // first moments of a new career
   opening() {
     const s = this.state, o = s.story.origin;
     if (this.pendingCallsign) { s.p3.callsign = this.pendingCallsign; this.pendingCallsign = null; }
     document.getElementById('dialog').classList.remove('introOv');
-    setTimeout(() => this.comm('wick', "Systems online. I'm Wick, your ship's assistant. Let's keep it simple to start: mine that asteroid field, or dock at the station and trade. I'll walk you through the rest when it matters.", { once: 'wick-hello' }), 1500);
+    setTimeout(() => this.comm('wick', "Systems online. I'm Wick, your ship's assistant. Let's keep it simple to start: mine that asteroid field, or dock at the station and trade. I'll walk you through the rest when it matters.", { once: 'wick-hello', ack: true }), 1500);
     if (o === 'deserter') setTimeout(() => this.comm('hale', "Pilot. You left the Patrol without a word, and with a Patrol cipher key. Bring it back and we can talk. Until then, don't expect a warm welcome in Accord space.", { once: 'hale-1', kind: 'warn' }), 26000);
     if (o === 'debtor') setTimeout(() => this.comm('vex', "Morning, sunshine. Twenty thousand, remember? Pay me at any Fringe station. I check in every week. Don't make me come find you.", { once: 'vex-1', kind: 'warn' }), 26000);
     if (o === 'heir') setTimeout(() => this.comm('ama', "Child of the Lantern line. Your grandmother's log came to me through the old channels. The songs say the logs wake something out past the charts. Find the wrecks, and listen.", { once: 'ama-1' }), 26000);
