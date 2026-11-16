@@ -439,6 +439,8 @@ export class UI {
       rows.push(`<div class="jr"><b>${m.title}</b> <small>for ${m.client}</small><p>→ ${m.dest.name} (${where(m.dest.sys)}) · ${due} · pays <b>◈${fmt(m.reward)}</b>${extra}</p>${btn('SET COURSE', () => g.missionCourse(m))}</div>`);
     }
     const other = [];
+    const k7 = s.explore.k7;
+    if (k7 && k7.stage === 'go') other.push(`<div class="jr story"><b>📡 Site K-7</b><p>${s.story.origin === 'deserter' ? 'The Patrol wreck nobody is supposed to see' : "Marrow's crews are going back with cutters. Get there first"}: ${where(k7.sys)}.</p>${btn('SET COURSE', () => g.setCourse(k7.sys, { type: 'k7' }))}</div>`);
     if (s.story.debt > 0) other.push(`<div class="jr"><b>📒 Red Wake marker</b><p>You owe ${s.story.debtRate ? 'Silas Marrow' : 'Vex Tannery'} <b>◈${fmt(s.story.debt)}</b>. Pay at any Fringe station (Services).</p></div>`);
     const SA = s.siege.active;
     if (SA && SA.phase !== 'done') other.push(`<div class="jr"><b>⚔ Siege</b><p>${g.siege.newsLine()}</p>${SA.target.sys !== sid ? btn('SET COURSE', () => g.siege.courseTo()) : ''}</div>`);
@@ -878,7 +880,7 @@ export class UI {
     } else if (act === 'fabmod') {
       const rec = g.activeShipRec(), lvl = rec.mods[arg] + 1, price = modulePrice(rec.hull, arg, lvl), fc = Math.round(price * 0.45 / 10) * 10, mats = moduleMats(lvl);
       if (lvl <= 3 && hasFabricator(g.sysInfo.eco) && s.credits >= fc && haveMats(p.cargo, mats)) {
-        s.credits -= fc; takeMats(p.cargo, mats); rec.mods[arg] = lvl; g.refreshPlayerStats(); s.craft.made++;
+        s.credits -= fc; takeMats(p.cargo, mats); rec.mods[arg] = lvl; g.refreshPlayerStats(); s.craft.made++; s.stats.upgrades = (s.stats.upgrades || 0) + 1; s.stats.upgrades = (s.stats.upgrades || 0) + 1;
         if (arg === 'missile') p.missiles = p.stats.mslCap;
         if (arg === 'barrier') p.shield = p.maxShield;
         g.audio.play('coins', { vol: 0.7 }); this.toast(`Fabricated ${MODULES[arg].name} Mk${lvl}: saved ◈ ${fmt(price - fc)}`, 'good', 3);
@@ -898,7 +900,7 @@ export class UI {
     } else if (act === 'upgrade') {
       const rec = g.activeShipRec(); const lvl = rec.mods[arg] + 1; const price = modulePrice(rec.hull, arg, lvl);
       if (s.credits >= price && lvl <= 3) {
-        s.credits -= price; rec.mods[arg] = lvl; g.refreshPlayerStats();
+        s.credits -= price; rec.mods[arg] = lvl; g.refreshPlayerStats(); s.stats.upgrades = (s.stats.upgrades || 0) + 1;
         if (arg === 'missile') p.missiles = p.stats.mslCap;
         if (arg === 'barrier') p.shield = p.maxShield;
         g.audio.play('coins', { vol: 0.7 }); this.toast(`${MODULES[arg].name} Mk${lvl} installed`, 'good', 2.5);
@@ -1203,7 +1205,7 @@ export class UI {
       const sel = this.mapSel && this.mapSel.sys === s.id;
       if (sel) { ctx.strokeStyle = '#f0703c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 22, 0, Math.PI * 2); ctx.stroke(); }
       const br = s.id === cur ? 20 : sel ? 23 : 12;
-      labels.push({ x, y, gap: br + 2, lines: [`${g.state.story.arc && g.state.story.arc.target === s.id ? '📖 ' : ''}${s.name}`, `${isAccordEco(s.eco) ? '🛡 ' : ''}${ECONOMIES[s.eco].name}${known ? '' : ' · ?'}`], short: [s.name], font: '900 13px "Arial Black", system-ui', font2: '700 10px system-ui', lh: 15,
+      labels.push({ x, y, gap: br + 2, lines: [`${g.state.story.arc && g.state.story.arc.target === s.id ? '📖 ' : ''}${g.state.explore.k7.stage === 'go' && g.state.explore.k7.sys === s.id ? '📡 ' : ''}${s.name}`, `${isAccordEco(s.eco) ? '🛡 ' : ''}${ECONOMIES[s.eco].name}${known ? '' : ' · ?'}`, ...(g.explore.signalFor(s.id) ? [g.explore.signalFor(s.id)] : [])], short: [s.name], font: '900 13px "Arial Black", system-ui', font2: '700 10px system-ui', lh: 15,
         color: sel ? '#f0703c' : '#efe6d2', color2: known ? 'rgba(239,230,210,.85)' : 'rgba(239,230,210,.5)', pri: sel ? 99 : s.id === cur ? 50 : 10, force: sel || s.id === cur,
         blocks: [{ x: x - br, y: y - br, w: br * 2, h: br * 2 }] });
     }

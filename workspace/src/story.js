@@ -107,6 +107,7 @@ export function applyOrigin(state, galaxy, id) {
     const sys = nearestSystem(galaxy, galaxy.startId, (s) => s.eco === 'mining') || nearestSystem(galaxy, galaxy.startId, (s) => !isAccordEco(s.eco));
     state.systemId = sys.id;
     for (const f of ACCORD) state.factions[f] = -12;
+    state.explore.resonator = false; // found at Site K-7
     state.factions.frontier = 6;
     rec.mods.beam = 1; rec.mods.missile = 1; rec.missiles = 4; state.unlocks.factions = true;
     state.credits = 1500;
@@ -115,6 +116,7 @@ export function applyOrigin(state, galaxy, id) {
     state.systemId = sys.id;
     rec.mods.mining = 1; rec.mods.cargo = 1;
     state.credits = 3500;
+    state.explore.resonator = false; // found at Site K-7
     state.story.debt = 20000; state.story.debtWeekPaid = 0; state.story.debtCheck = 7;
     state.factions.pirate = 4;
   } else if (id === 'heir') {

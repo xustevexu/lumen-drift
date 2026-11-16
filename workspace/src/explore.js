@@ -45,7 +45,14 @@ export function normalizeExploreState(state) {
   for (const k of ['done', 'seen', 'cleared']) if (!e[k] || typeof e[k] !== 'object') e[k] = {};
   if (!Number.isFinite(e.lore)) e.lore = 0;
   e.unlocked = !!e.unlocked; e.heart = !!e.heart;
-  if (!Number.isFinite(e.dry)) e.dry = 0; // wrecks searched since the last log
+  if (!Number.isFinite(e.dry)) e.dry = 0;
+  // The Lantern Resonator wakes cores. Older careers (and the Heir, whose log does the same job) have it;
+  // a new Deserter or Debtor gets it from Site K-7 (see applyOrigin).
+  if (typeof e.resonator !== 'boolean') e.resonator = true;
+  if (!e.visited || typeof e.visited !== 'object') e.visited = Object.fromEntries(Object.keys(state.intel || {}).map((k) => [k, 1]));
+  if (!e.hummed || typeof e.hummed !== 'object') e.hummed = {};
+  if (!e.k7 || typeof e.k7 !== 'object') e.k7 = { stage: 'none', sys: null };
+  // e.cores: { wreckKey: 1 } where the remaining cores hide; placed once per career (ensureCores)
   return state;
 }
 export function anomaliesFor(galaxy, sysId) {
@@ -133,23 +140,94 @@ function buildDormantGate() {
 
 // ---------------------------------------------------------------- runtime
 const _v = new THREE.Vector3();
+// where the remaining cores hide: a fixed handful of wrecks, concentrated in a few systems, none close to home
+export function placeCores(state, galaxy, home, count) {
+  const ex = state.explore, rng = new RNG(state.seed + 313 + ex.lore * 7), dist = jumpsFrom(galaxy, home), cores = {};
+  const bySys = (minJ) => galaxy.systems.filter((x) => !x.hidden && dist[x.id] != null && dist[x.id] >= minJ)
+    .map((x) => ({ id: x.id, wrecks: anomaliesFor(galaxy, x.id).filter((a) => a.type === 'wreck' && !ex.done[a.key]).map((a) => a.key) }))
+    .filter((x) => x.wrecks.length);
+  let left = count;
+  for (const minJ of [2, 1, 0]) {
+    const pool = bySys(minJ).filter((x) => !x.wrecks.some((k) => cores[k]));
+    for (let i = pool.length - 1; i > 0; i--) { const j = rng.int(0, i); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    for (const sy of pool) {
+      if (left <= 0) break;
+      const take = Math.min(left, sy.wrecks.length, rng.int(2, 3)); // clusters of 2–3: most systems hold none
+      const w = sy.wrecks.slice(); for (let i = 0; i < take; i++) { const k = w.splice(rng.int(0, w.length - 1), 1)[0]; cores[k] = 1; left--; }
+    }
+    if (left <= 0) break;
+  }
+  return cores;
+}
+
 export class ExploreManager {
   constructor(game) { this.g = game; this.rt = new Map(); this.hold = null; this.drones = []; }
   get state() { return this.g.state; }
   get ex() { return this.state.explore; }
 
+  // ---- cores & the Resonator ----
+  coresLeft() { return Object.keys(this.ex.cores || {}).length; }
+  needsK7() { const o = this.state.story && this.state.story.origin; return (o === 'deserter' || o === 'debtor') && !this.ex.resonator && this.ex.k7.stage !== 'done'; }
+  ensureCores(home) {
+    const ex = this.ex, want = CHARTED_LORE - ex.lore - (this.needsK7() ? 1 : 0); // K-7 holds the first core for those two
+    if (ex.cores && this.coresLeft() >= want) return;
+    ex.cores = { ...(ex.cores || {}), ...placeCores(this.state, this.g.galaxy, home ?? this.g.galaxy.startId, want - this.coresLeft()) };
+  }
+  coresIn(sys) { return Object.keys(this.ex.cores || {}).filter((k) => k.startsWith(`${sys}:`)).length; }
+  hasCore(key) { return !!(this.ex.cores && this.ex.cores[key]); }
+  // the galaxy-map readout, once you carry a Resonator
+  signalFor(sys) {
+    if (!this.ex.resonator) return null;
+    const s = this.g.galaxy.systems[sys]; if (s.hidden) return null;
+    if (!this.ex.visited[sys]) return '?';
+    const n = this.coresIn(sys); return n ? `◆ CORE SIGNAL${n > 1 ? ` ×${n}` : ''}` : 'NO CORE SIGNAL';
+  }
+  // Site K-7: offered to a new Deserter or Debtor once they've mined, docked and bought 3 upgrades
+  checkK7() {
+    const g = this.g, s = this.state, ex = this.ex, o = s.story && s.story.origin;
+    if (!this.needsK7() || ex.k7.stage !== 'none') return;
+    if (!(s.stats.mined > 0 && s.tutorial.docked && (s.stats.upgrades || 0) >= 3) || g.docked || g.warp) return;
+    const dist = jumpsFrom(g.galaxy, s.systemId);
+    const cand = g.galaxy.systems.filter((x) => !x.hidden && dist[x.id] >= 2 && dist[x.id] <= 4);
+    const fringe = cand.filter((x) => x.eco === 'mining' || x.eco === 'frontier');
+    const pool = fringe.length ? fringe : cand.length ? cand : g.galaxy.systems.filter((x) => !x.hidden && x.id !== s.systemId);
+    const t = pool[new RNG(s.seed + 707).int(0, pool.length - 1)];
+    ex.k7 = { stage: 'go', sys: t.id };
+    const msg = o === 'deserter'
+      ? `I've been running your stolen cipher key against Patrol traffic, and something just decrypted. A standing order: "Site K-7, ${t.name} system. Do not approach. Do not report." The Patrol is hiding a wreck out there. I think we should see it before they find out we can read their mail.`
+      : `Intercepted chatter on a Red Wake band, gold-hook call signs. Marrow's salvage crews found a wreck at a place they call Site K-7, in ${t.name}, and they're going back with cutters. Whatever's in there, if they cut it out, it dies. We could get there first.`;
+    g.story.comm('wick', msg, { ack: true, kind: 'warn' });
+    g.p3 && 0; g.save();
+  }
+  k7Pos() { const sys = this.g.galaxy.systems[this.ex.k7.sys]; const r = new RNG(sys.seed + 7007); return this.placeFor({ type: 'wreck', a: r.range(0, Math.PI * 2), r: r.range(4200, 7600), y: r.range(-200, 200) }); }
+
   onEnterSystem() {
     for (const r of this.rt.values()) this.g.scene.remove(r.obj.group);
     this.rt.clear(); this.drones = []; this.hold = null;
     const g = this.g, sid = this.state.systemId;
+    this.ex.visited[sid] = 1;
     for (const a of anomaliesFor(g.galaxy, sid)) {
-      if (this.ex.done[a.key]) continue;
+      // searched wrecks come back only if a core still sleeps in them and you now carry a Resonator
+      if (this.ex.done[a.key] && !(a.type === 'wreck' && this.hasCore(a.key) && this.ex.resonator)) continue;
       const obj = a.type === 'wreck' ? this.wreckObj(a.seed) : a.type === 'pocket' ? buildPocket(a.seed) : a.type === 'beacon' ? buildBeacon() : a.type === 'rift' ? buildRift() : a.type === 'sentinel' ? buildSentinel() : buildSpire();
       const pos = this.placeFor(a);
       obj.group.position.copy(pos); if (a.type !== 'rift') obj.group.rotation.y = a.seed % 6;
       else obj.group.lookAt(0, pos.y, 0);
       g.scene.add(obj.group);
       this.rt.set(a.key, { a, obj, pos });
+    }
+    // Site K-7, with scavengers already working it
+    if (this.ex.k7.stage === 'go' && this.ex.k7.sys === sid) {
+      const obj = this.wreckObj(424242, 0xffc040), pos = this.k7Pos();
+      obj.group.position.copy(pos); obj.group.scale.setScalar(1.3); g.scene.add(obj.group);
+      this.rt.set('k7', { a: { key: 'k7', type: 'k7', seed: 424242 }, obj, pos });
+      this.ex.seen.k7 = 2; this.k7Guards = [];
+      setTimeout(() => {
+        if (!this.rt.has('k7') || g.state.systemId !== sid) return;
+        const deserter = this.state.story.origin === 'deserter';
+        g.spawnOutlaws({ n: 2, entry: pos.clone().add(_v.set(220, 60, -180)), name: deserter ? 'Unmarked Salvager' : 'Hook Cutter', tough: 1.0, quiet: true, toast: deserter ? '⚠ Two unmarked salvage ships are working Site K-7. Patrol hardware, no transponders.' : "⚠ Two Hook Cutter rigs are already at Site K-7. Marrow's crews got here first." });
+        this.k7Guards = g.outlaws.slice(-2);
+      }, 2500);
     }
     // the dormant gate sleeps in the host system until the logs wake it
     if (sid === g.galaxy.hostId && !this.ex.unlocked) {
@@ -160,7 +238,7 @@ export class ExploreManager {
       this.rt.set('dormant', { a: { key: 'dormant', type: 'dormant' }, obj, pos });
     }
   }
-  wreckObj(seed) { const D = buildDerelict(seed); D.lamp.material = D.lamp.material.clone(); D.lamp.material.color.set(0x6fe8ff); D.glow.material = D.glow.material.clone(); D.glow.material.color.set(0x6fe8ff); return { group: D.group, pulse: D.glow }; }
+  wreckObj(seed, color = 0x6fe8ff) { const D = buildDerelict(seed); D.lamp.material = D.lamp.material.clone(); D.lamp.material.color.set(color); D.glow.material = D.glow.material.clone(); D.glow.material.color.set(color); return { group: D.group, pulse: D.glow }; }
   // deterministic spot nudged clear of planets, fields, the station and gates
   placeFor(a) {
     const W = this.g.world; let ang = a.a;
@@ -187,9 +265,16 @@ export class ExploreManager {
         g.ui.toast(`? Unknown signal detected ${g.ui.dist(r.pos.distanceTo(p.pos))} away`, 'info', 4);
         g.audio.play('click', { vol: 0.5, rate: 0.7 });
       }
+      // the Resonator acts up near a wreck that still holds a core
+      if (r.a.type === 'wreck' && this.ex.resonator && this.hasCore(key) && !this.ex.hummed[key] && r.pos.distanceTo(p.pos) < 600) {
+        this.ex.hummed[key] = 1; this.ex.seen[key] = 2;
+        g.story.comm('wick', "The Resonator's acting up: it's humming at that wreck. There's a sleeping core in there. Hold a scan on it and let it wake.", { kind: 'good' });
+        g.audio.play('click', { vol: 0.5, rate: 0.6 });
+      }
       // sentinels wake when you come close
       if (r.a.type === 'sentinel' && !this.ex.cleared[key] && !r.awake && r.pos.distanceTo(p.pos) < 900 && !g.docked) this.wakeSentinel(r);
     }
+    this.k7Check = (this.k7Check || 0) - dt; if (this.k7Check <= 0) { this.k7Check = 1; this.checkK7(); }
     if (this.drones.length) {
       this.drones = this.drones.filter((d) => !d.dead);
       if (!this.drones.length && this.awakeKey) { this.ex.cleared[this.awakeKey] = 1; g.ui.toast('⟁ The sentinels are silent. The cache is open: fly in and INVESTIGATE.', 'good', 5); this.awakeKey = null; }
@@ -231,8 +316,9 @@ export class ExploreManager {
       if (key === 'dormant') { if (r.pos.distanceTo(p.pos) < 400) return { type: 'dormant', label: 'DORMANT GATE' }; continue; }
       if (r.pos.distanceTo(p.pos) > (r.a.type === 'rift' ? 220 : r.a.type === 'spire' ? 260 : 170)) continue;
       if (r.a.type === 'sentinel' && !this.ex.cleared[key]) continue;
+      if (key === 'k7' && (this.k7Guards || []).some((o) => !o.dead)) return { type: 'blocked', label: 'CLEAR THE SCAVENGERS FIRST' };
       const pct = this.hold && this.hold.key === key ? Math.round(this.hold.t / HOLD_TIME * 100) : 0;
-      const name = this.ex.seen[key] === 2 || r.a.type === 'spire' ? TYPES[r.a.type].name : 'UNKNOWN SIGNAL';
+      const name = key === 'k7' ? 'SITE K-7' : r.a.type === 'wreck' && this.ex.done[key] ? 'SLEEPING CORE' : this.ex.seen[key] === 2 || r.a.type === 'spire' ? TYPES[r.a.type].name : 'UNKNOWN SIGNAL';
       return { type: 'investigate', label: pct ? `SCANNING ${pct}%` : `INVESTIGATE ${name.toUpperCase()}`, hold: true, warm: true, key, target: r.pos };
     }
     return null;
@@ -246,16 +332,6 @@ export class ExploreManager {
     g.audio.loop('mine', 'mine', true, 0.25, 0.5);
     if (this.hold.t >= HOLD_TIME) { this.hold = null; g.mineBeam.visible = false; g.audio.loop('mine', 'mine', false); g.input.mine = false; this.resolve(act.key); }
   }
-  // the logs are keyed to each other: with none aboard a Lantern wreck reads as scrap, which is why nobody
-  // has found them in 300 years. Your first log is luck; after that each one helps the next answer.
-  logFound(rng) {
-    const ex = this.ex, dry = ex.dry || 0, gx = this.g.galaxy;
-    // safety net: never let the unsearched wrecks run out before the logs do
-    let left = 0; for (const sy of gx.systems) if (!sy.hidden) for (const a of anomaliesFor(gx, sy.id)) if (a.type === 'wreck' && !ex.done[a.key]) left++;
-    if (left < CHARTED_LORE - ex.lore) return true;
-    if (ex.lore === 0) return dry >= 3 || rng.next() < 0.3;
-    return dry >= 2 || rng.next() < (dry === 0 ? 0.4 : 0.7);
-  }
   logNews(n) {
     const p3 = this.g.p3, cs = this.state.p3 && this.state.p3.callsign; if (!p3 || !cs) return;
     if (n === 1) p3.headline(`Independent pilot ${cs} recovers a lost Lantern Fleet log. The Lumen Institute calls it "very interesting".`);
@@ -264,11 +340,18 @@ export class ExploreManager {
   }
   dormantDialog() {
     const n = this.ex.lore;
-    this.g.ui.dialog(`<div class="ov-title">DORMANT GATE</div><p>A jump gate that appears on no chart. Its ring is cold and its portal dark, but something inside hums when your sensors touch it.</p><p>Exodus Logs recovered: <b>${n}/${FRAGMENTS_TO_UNLOCK}</b> needed to wake it. Logs lie in Lantern Fleet wrecks across the charted systems, though scavengers have stripped many. Once you carry a log, the others answer it.</p>`, [{ label: 'CLOSE', primary: true }]);
+    this.g.ui.dialog(`<div class="ov-title">DORMANT GATE</div><p>A jump gate that appears on no chart. Its ring is cold and its portal dark, but something inside hums when your sensors touch it.</p><p>Exodus Logs recovered: <b>${n}/${FRAGMENTS_TO_UNLOCK}</b> needed to wake it. Logs sleep in a handful of Lantern Fleet wrecks; scavengers have stripped the rest. Only a Lantern Resonator can wake a core.</p>`, [{ label: 'CLOSE', primary: true }]);
   }
   resolve(key) {
     const g = this.g, s = this.state, ex = this.ex, r = this.rt.get(key); if (!r) return;
     const a = r.a, rng = new RNG(a.seed + 1), rank = pilotRank(s);
+    if (key === 'k7') { this.resolveK7(r); return; }
+    // a wreck you already salvaged, revisited with the Resonator: just the core
+    if (a.type === 'wreck' && ex.done[key] && this.hasCore(key)) {
+      g.scene.remove(r.obj.group); this.rt.delete(key); g.fx.particles.burst(r.pos, 50, 70, 0x7fe8ff, 6, 1.3);
+      delete ex.cores[key]; const idx = ex.lore++;
+      this.showLog(idx, 'The core you found cold and silent before wakes the moment the Resonator touches it.'); this.logNews(ex.lore); this.checkUnlock(); g.save(); return;
+    }
     ex.done[key] = 1; ex.seen[key] = 2;
     g.scene.remove(r.obj.group); this.rt.delete(key);
     g.fx.particles.burst(r.pos, 40, 60, 0x7fe8ff, 5, 1.2);
@@ -277,14 +360,16 @@ export class ExploreManager {
     if (a.type === 'wreck') {
       const cr = 300 + rng.int(0, 500) + rank * 100; g.addCredits(cr);
       blueprintDrop(g, 0.1, 'wreck');
-      if (ex.lore < CHARTED_LORE && this.logFound(rng)) {
-        const idx = ex.lore++; ex.dry = 0;
+      if (this.hasCore(key) && !ex.resonator) {
+        // a core is here, but without a Resonator it's dead to every instrument you have: it stays for later
+        g.ui.toast(`Salvaged ◈${fmt(cr)}. A Lantern core sits in the wreck's cradle, cold and silent. Nothing you carry can read it.`, 'good', 7);
+        if (!s.story.said['tip-coldcore']) { s.story.said['tip-coldcore'] = 1; setTimeout(() => g.story.comm('wick', "That core isn't stripped, it's asleep. I can't wake it with anything we've got. Let's remember this wreck."), 1500); }
+      } else if (this.hasCore(key)) {
+        delete ex.cores[key]; const idx = ex.lore++;
         const heir = s.story && s.story.origin === 'heir';
-        const note = idx === 0 ? ' The core was dormant, and your scan woke it. Scavengers cut these cores out for the crystal and kill them. Nobody ever stayed long enough to listen. You did.'
-          : idx === 1 && heir ? " Grandmother's log was already awake. As you closed in it hummed, and this one answered."
-          : idx === 1 ? ' Your first log hummed as you closed in, and this one answered.' : '';
+        const note = idx === 1 && heir ? " Grandmother's log was already awake. As you closed in it hummed, and this one answered."
+          : idx === 0 ? ' The core was asleep in its cradle until your scan reached it.' : ' The core woke as your scan reached it.';
         this.showLog(idx, `Salvaged ◈${fmt(cr)} from the wreck.${note}`);
-        if (idx === 0) setTimeout(() => g.story.comm('wick', "That core was dormant until our scan woke it. I think that's how the Fleet meant it: for whoever keeps going. It's humming at the other wrecks now.", { once: 'tip-firstlog' }), 1200);
         if (idx === 1 && heir) setTimeout(() => g.story.comm('wick', "Your grandmother's log called that one awake. The scavengers have been cutting these cores out for centuries, and a cut core dies. Nobody ever listened. Now the logs answer each other, and they'll answer us.", { once: 'tip-firstlog' }), 1200);
         this.logNews(ex.lore); this.checkUnlock();
       } else {
@@ -319,6 +404,27 @@ export class ExploreManager {
     }
     g.save();
   }
+  resolveK7(r) {
+    const g = this.g, s = this.state, ex = this.ex, deserter = s.story.origin === 'deserter';
+    g.scene.remove(r.obj.group); this.rt.delete('k7');
+    g.fx.particles.burst(r.pos, 70, 90, 0xffc040, 7, 1.5); g.audio.play('warp', { vol: 0.4, rate: 1.3 });
+    ex.resonator = true; ex.k7 = { stage: 'done', sys: ex.k7.sys };
+    const idx = ex.lore++; g.addCredits(1500);
+    this.ensureCores(s.systemId);
+    const scene = deserter
+      ? `<p>Inside K-7 the Patrol left survey gear and a sealed case stamped <b>Logistics Division · authorised D. Mercer</b>. Somebody has been studying this wreck, quietly, for a long time.</p>`
+      : `<p>Cutting rigs are bolted all over the hull, a gold hook welded to every one. Marrow's crews were an hour from carving this wreck open.</p>`;
+    g.ui.dialog(`<div class="arc-head"><img src="./portraits/wick.jpg" alt=""><div><small>SITE K-7</small><div class="ov-title">THE RESONATOR</div></div></div>${scene}
+      <p>Wedged in the core cradle is a fist-sized lattice of brass and crystal, warm to the touch. The moment your hand closes on it, it <b>hums</b>, and the core beside it, cold for three hundred years, flickers awake.</p>
+      <p>A <b>Lantern Resonator</b>. Without one, a Lantern core reads as dead scrap to any instrument. That's why nobody has found a log in three centuries. With one, they wake.</p>
+      <p><small>+◈1,500 of salvage. The Resonator stays with you whatever ship you fly.</small></p>`,
+    [{ label: 'WAKE THE CORE', primary: true, fn: () => {
+      this.showLog(idx, 'Etched around the cradle, in an engineer\'s careful hand: "For whoever keeps going. — I. Varga"');
+      this.logNews(ex.lore); this.checkUnlock();
+      setTimeout(() => g.story.comm('wick', "That's what the Resonator is for. With it aboard, sleeping cores will answer us, and I can read them off the galaxy map: CORE SIGNAL or NO CORE SIGNAL for every system we've visited. Including that cold one we found earlier, if there was one.", { ack: true }), 800);
+    } }]);
+    g.save();
+  }
   showLog(idx, footer) {
     const L = LORE[idx];
     this.g.ui.dialog(`<div class="arc-head"><img src="./portraits/varga.jpg" alt=""><div><small>CAPT. ILSE VARGA · HALCYON</small><div class="ov-title">📜 EXODUS LOG ${idx + 1}/${LORE.length}</div></div></div><p><b>${L.title}</b></p><p style="font-style:italic">${L.text}</p><p><small>${footer}</small></p>`, [{ label: 'CONTINUE', primary: true }]);
@@ -339,10 +445,11 @@ export class ExploreManager {
     const out = [];
     for (const [key, r] of this.rt) {
       if (key === 'dormant') { out.push({ key: 'ex_dormant', pos: r.pos, cls: 'dormant', name: '⟁ DORMANT GATE', edge: false }); continue; }
+      if (key === 'k7') { out.push({ key: 'ex_k7', pos: r.pos, cls: 'anomaly route', name: '📡 SITE K-7', edge: true }); continue; }
       const seen = this.ex.seen[key];
       if (!seen && r.a.type !== 'spire') continue;
-      const T = TYPES[r.a.type];
-      out.push({ key: `ex_${key}`, pos: r.pos, cls: 'anomaly', name: seen === 2 || r.a.type === 'spire' ? `${T.icon} ${T.name.toUpperCase()}` : '? UNKNOWN SIGNAL', edge: seen === 2 });
+      const T = TYPES[r.a.type], core = r.a.type === 'wreck' && this.ex.resonator && this.hasCore(key) && (this.ex.hummed[key] || this.ex.done[key]);
+      out.push({ key: `ex_${key}`, pos: r.pos, cls: 'anomaly', name: core ? '◆ LANTERN WRECK · CORE DETECTED' : seen === 2 || r.a.type === 'spire' ? `${T.icon} ${T.name.toUpperCase()}` : '? UNKNOWN SIGNAL', edge: seen === 2 || core });
     }
     return out;
   }
@@ -350,8 +457,10 @@ export class ExploreManager {
     const out = [];
     for (const [key, r] of this.rt) {
       if (key === 'dormant') { out.push({ kind: 'anomaly', anomaly: r.a, pos: r.pos, name: 'Dormant gate', color: '#ff8060', r: 6, arrive: 300 }); continue; }
+      if (key === 'k7') { out.push({ kind: 'anomaly', anomaly: r.a, pos: r.pos, name: 'Site K-7', color: '#ffc040', r: 6, arrive: 140 }); continue; }
       const seen = this.ex.seen[key]; if (!seen && r.a.type !== 'spire') continue;
-      out.push({ kind: 'anomaly', anomaly: r.a, pos: r.pos, name: seen === 2 || r.a.type === 'spire' ? TYPES[r.a.type].name : 'Unknown signal', color: '#7fe8ff', r: 5, arrive: 120 });
+      const core = r.a.type === 'wreck' && this.ex.resonator && this.hasCore(key) && (this.ex.hummed[key] || this.ex.done[key]);
+      out.push({ kind: 'anomaly', anomaly: r.a, pos: r.pos, name: core ? 'Lantern wreck · core detected' : seen === 2 || r.a.type === 'spire' ? TYPES[r.a.type].name : 'Unknown signal', color: core ? '#c8f56a' : '#7fe8ff', r: 5, arrive: 120 });
     }
     return out;
   }

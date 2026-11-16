@@ -171,11 +171,13 @@ export class Game {
       this.economy = new Economy(this.galaxy, this.state);
       this.state.systemId = this.galaxy.startId;
       if (origin) { lockAll(this.state); applyOrigin(this.state, this.galaxy, origin); }
+      this.explore.ensureCores(this.state.systemId);
       this.enterSystem(this.state.systemId, null, true);
     }
     this.audio.unlock();
     this.audio.setEnabled(this.state.sound);
     this.audio.setMusic('calm');
+    if (!fresh && !this.state.explore.cores) this.explore.ensureCores(this.galaxy.startId);
     this.mode = 'play';
     this.ui.enterPlay();
     this.checkDeadlines();
@@ -1143,6 +1145,7 @@ export class Game {
     if (then.type === 'mission') { const m = this.state.missions.find((x) => x.id === then.id); if (m) this.missionCourse(m); return; }
     if (then.type === 'outpost') { const o = this.state.outposts.find((x) => x.id === then.id); if (o) this.outposts.courseTo(o); return; }
     if (then.type === 'siege') { this.siege.courseTo(); return; }
+    if (then.type === 'k7') { const r = this.explore.rt.get('k7'); if (r) this.setAutopilot(r.pos, 'Site K-7', 160); return; }
     this.setAutopilot(this.world.station.pos, this.world.station.name, 200, this.world.station);
   }
   cancelCourse() { if (this.state.course) { this.state.course = null; this.ui.toast('Course cleared', 'info', 2); } }
