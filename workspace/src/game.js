@@ -930,7 +930,7 @@ export class Game {
     }
     if (node.amount <= 0) {
       this.fx.particles.burst(node.pos, 40, 40, 0xc0b0a0, 5, 1.4);
-      this.audio.play('explosion', { pos: node.pos, vol: 0.3, rate: 1.4 });
+      this.audio.play(`crumble${Math.floor(Math.random() * 3)}`, { pos: node.pos, vol: node.kind === 'deposit' ? 0.75 : 0.55, rate: node.kind === 'deposit' ? 0.85 : 1 }); // rock breaking apart, not an explosion
     }
   }
 
