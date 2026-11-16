@@ -254,3 +254,6 @@ Each level of Barrier, Hull Plating, Beams or Missiles on a route ship cuts its 
 - Log recoveries make headlines (1st, 3rd, 5th, the gate waking), which count as deeds for Kade, who mentions the logs when he first meets you.
 - Story ties: Ama (Heir ch1) explains the keying and the scavengers; Solak's ch3 call says the Institute found only scrap in fifty years; Marrow's ledger (Debtor ch4) shows years of payments for Lantern salvage; Solak notices any logs aboard in the Deserter's ch2.
 - Gamepad: expandable rows (Exodus Log entries) are now in the controller's focus list; A opens/closes them.
+
+## 12u. Station defenses (stationdef.js)
+Every station has 4 point-defense turrets that fire on outlaws within 1,150 m (DPS per turret: High-Tech 30, Industrial 28, Agricultural 22, Mining 18, Frontier 16; all four focus the nearest raider). They ignore lawful enforcers, pirate bases, siege proxies and Kade's duels; during a live siege of this station the armada jams them to 30%. First engagement per system toasts, and Wick explains once that stations are a refuge. The system map draws the defense zone as a faint dotted ring around the station.

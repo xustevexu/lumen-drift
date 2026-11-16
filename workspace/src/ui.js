@@ -2,6 +2,7 @@ import { unlocked, isAccordEco } from './story.js';
 // is map item `it` the current selection? (system items by key, galaxy items by system id)
 const sameSel = (sel, it) => !!sel && (sel.key != null ? sel.key === it.key : sel.sys != null ? sel.sys === it.sys : sel.name === it.name);
 import { licenseNeeds, LICENSE_PRICE } from './accord.js';
+import { DEFENSE_RANGE } from './stationdef.js';
 import * as THREE from 'three';
 import { COMMODITIES, COMM, ECONOMIES, HULLS, HULL_ORDER, MODULES, MODULE_ORDER, modulePrice, statLine, emptyMods, computeStats, DAY_LENGTH } from './data.js';
 import { fmt, clamp } from './rng.js';
@@ -996,7 +997,7 @@ export class UI {
   }
   systemItems() {
     const g = this.g, Wd = g.world, items = [];
-    items.push({ kind: 'station', pos: Wd.station.pos, name: Wd.station.name, color: '#9ff0ff', r: 7, arrive: 200, ignore: Wd.station });
+    items.push({ kind: 'station', pos: Wd.station.pos, name: Wd.station.name, color: '#9ff0ff', r: 7, arrive: 200, ignore: Wd.station, zone: DEFENSE_RANGE });
     Wd.gates.forEach((gt) => items.push({ kind: 'gate', pos: gt.pos, name: `Gate → ${g.galaxy.systems[gt.to].name}`, color: '#d6b8ff', r: 6, arrive: 250, gate: gt }));
     Wd.fields.forEach((f) => items.push({ kind: 'field', pos: f.center, name: f.name, color: '#e8d3a4', r: 6, ring: f.radius, arrive: f.radius + 40, field: f, ignore: f }));
     Wd.planets.forEach((pl, i) => {
@@ -1044,6 +1045,7 @@ export class UI {
     const labels = [];
     for (const it of this.systemItems()) {
       const [x, y] = P(it.pos);
+      if (it.zone) { ctx.save(); ctx.strokeStyle = '#9ff0ff'; ctx.globalAlpha = 0.35; ctx.lineWidth = 1.5; ctx.setLineDash([2, 5]); ctx.beginPath(); ctx.arc(x, y, it.zone * s, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); } // station defense zone
       const rad = Math.max(it.r, (it.ring || 0) * s);
       if (it.kind === 'field' && it.field.surge) { ctx.fillStyle = 'rgba(200,245,106,.18)'; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill(); }
       if (it.ring) { ctx.strokeStyle = it.kind === 'field' && it.field.surge ? '#c8f56a' : it.color; ctx.globalAlpha = it.kind === 'field' && !it.field.surge ? 0.55 : 1; ctx.lineWidth = 2; ctx.setLineDash(it.kind === 'field' ? [3, 3] : []); ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); if (it.kind === 'planet') { ctx.fillStyle = it.color; ctx.fill(); } ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }

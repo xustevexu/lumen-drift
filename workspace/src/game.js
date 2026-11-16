@@ -25,6 +25,7 @@ import { Story, normalizeStoryState, lockAll, applyOrigin, isAccordEco } from '.
 import { AccordManager, ACCORD_RAID, FRINGE_RAID } from './accord.js';
 import { ArcManager, raidMult, fuelMult } from './arcs.js';
 import { Phase3 } from './phase3.js';
+import { StationDefense } from './stationdef.js';
 import { SectorEvents, normalizeEventState } from './events.js';
 import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
 import { RNG, clamp, damp, fmt } from './rng.js';
@@ -72,6 +73,7 @@ export class Game {
     this.accord = new AccordManager(this);
     this.arcs = new ArcManager(this);
     this.p3 = new Phase3(this);
+    this.stationDef = new StationDefense(this);
     window.addEventListener('resize', () => this.resize());
     this.resize();
 
@@ -262,6 +264,7 @@ export class Game {
     this.fleet.spawnAll();
     this.explore.onEnterSystem();
     this.accord.onEnterSystem();
+    this.stationDef.onEnterSystem();
     this.arcs.onEnterSystem(initial);
     this.p3.onEnterSystem();
     if (!initial && this.state.course) setTimeout(() => { if (!this.docked && !this.warp) this.followCourse(); }, 1200);
@@ -1287,6 +1290,7 @@ export class Game {
     this.fleet.update(dt);
     this.explore.update(dt);
     this.accord.update(dt);
+    this.stationDef.update(dt);
     this.accord.updateChatter(dt);
     // battle music when outlaws are close
     const near = this.hostilesNear(1600);
