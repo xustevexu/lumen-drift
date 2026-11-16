@@ -110,6 +110,7 @@ export function shipValue(ship) {
 export function netWorth(state) {
   let w = state.credits;
   for (const s of state.ships) { w += shipValue(s); for (const k in s.cargo) w += s.cargo[k] * COMM[k].base; }
+  w -= (state.story && state.story.debt) || 0; // what you owe the Red Wake isn't yours
   return w;
 }
 export function pilotRank(state) {

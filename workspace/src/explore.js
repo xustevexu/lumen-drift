@@ -165,6 +165,9 @@ export class ExploreManager {
   get state() { return this.g.state; }
   get ex() { return this.state.explore; }
 
+  // Has this pilot heard of the Lantern Fleet's logs yet? A new Deserter or Debtor hasn't, until Site K-7.
+  knowsLantern() { const o = this.state.story && this.state.story.origin; return !(o === 'deserter' || o === 'debtor') || this.ex.lore > 0 || this.ex.resonator || this.ex.k7.stage !== 'none'; }
+  typeName(type) { return type === 'wreck' && !this.knowsLantern() ? 'Old wreck' : TYPES[type].name; }
   // ---- cores & the Resonator ----
   coresLeft() { return Object.keys(this.ex.cores || {}).length; }
   needsK7() { const o = this.state.story && this.state.story.origin; return (o === 'deserter' || o === 'debtor') && !this.ex.resonator && this.ex.k7.stage !== 'done'; }
@@ -318,7 +321,7 @@ export class ExploreManager {
       if (r.a.type === 'sentinel' && !this.ex.cleared[key]) continue;
       if (key === 'k7' && (this.k7Guards || []).some((o) => !o.dead)) return { type: 'blocked', label: 'CLEAR THE SCAVENGERS FIRST' };
       const pct = this.hold && this.hold.key === key ? Math.round(this.hold.t / HOLD_TIME * 100) : 0;
-      const name = key === 'k7' ? 'SITE K-7' : r.a.type === 'wreck' && this.ex.done[key] ? 'SLEEPING CORE' : this.ex.seen[key] === 2 || r.a.type === 'spire' ? TYPES[r.a.type].name : 'UNKNOWN SIGNAL';
+      const name = key === 'k7' ? 'SITE K-7' : r.a.type === 'wreck' && this.ex.done[key] ? 'SLEEPING CORE' : this.ex.seen[key] === 2 || r.a.type === 'spire' ? this.typeName(r.a.type) : 'UNKNOWN SIGNAL';
       return { type: 'investigate', label: pct ? `SCANNING ${pct}%` : `INVESTIGATE ${name.toUpperCase()}`, hold: true, warm: true, key, target: r.pos };
     }
     return null;
@@ -362,8 +365,9 @@ export class ExploreManager {
       blueprintDrop(g, 0.1, 'wreck');
       if (this.hasCore(key) && !ex.resonator) {
         // a core is here, but without a Resonator it's dead to every instrument you have: it stays for later
-        g.ui.toast(`Salvaged ◈${fmt(cr)}. A Lantern core sits in the wreck's cradle, cold and silent. Nothing you carry can read it.`, 'good', 7);
-        if (!s.story.said['tip-coldcore']) { s.story.said['tip-coldcore'] = 1; setTimeout(() => g.story.comm('wick', "That core isn't stripped, it's asleep. I can't wake it with anything we've got. Let's remember this wreck."), 1500); }
+        const know = this.knowsLantern();
+        g.ui.toast(know ? `Salvaged ◈${fmt(cr)}. A Lantern core sits in the wreck's cradle, cold and silent. Nothing you carry can read it.` : `Salvaged ◈${fmt(cr)}. Something sits in the wreck's old core cradle: a lattice of crystal, cold and silent. Nothing you carry can read it.`, 'good', 7);
+        if (!s.story.said['tip-coldcore']) { s.story.said['tip-coldcore'] = 1; setTimeout(() => g.story.comm('wick', know ? "That core isn't stripped, it's asleep. I can't wake it with anything we've got. Let's remember this wreck." : "Whatever that crystal is, it isn't scrap, and it isn't dead either. I can't read it. Let's remember this wreck."), 1500); }
       } else if (this.hasCore(key)) {
         delete ex.cores[key]; const idx = ex.lore++;
         const heir = s.story && s.story.origin === 'heir';
@@ -376,6 +380,7 @@ export class ExploreManager {
         ex.dry++;
         const marrow = s.story && s.story.origin === 'debtor' && s.story.arc && s.story.arc.ch >= 2;
         const mark = marrow ? "gold-hook marks: Marrow's salvage crews" : 'Red Wake tags scratched into the hull';
+        if (!this.knowsLantern()) { g.ui.toast(`Salvaged ◈${fmt(cr)}. Somebody picked this old hull clean a long time ago.`, 'good', 5); g.save(); return; }
         g.ui.toast(ex.lore >= CHARTED_LORE ? `Salvaged ◈${fmt(cr)}. The log core was already wiped.` : `Salvaged ◈${fmt(cr)}, but scavengers got here first: the log core is gone. ${mark[0].toUpperCase() + mark.slice(1)}.`, 'good', 6);
         if (ex.lore < CHARTED_LORE && !s.story.said['tip-stripped']) { s.story.said['tip-stripped'] = 1; setTimeout(() => g.story.comm('wick', "Stripped. The Red Wake has picked over the Lantern trail for three hundred years. Not every wreck still has its log; we'll have to keep looking."), 1500); }
       }
@@ -449,7 +454,7 @@ export class ExploreManager {
       const seen = this.ex.seen[key];
       if (!seen && r.a.type !== 'spire') continue;
       const T = TYPES[r.a.type], core = r.a.type === 'wreck' && this.ex.resonator && this.hasCore(key) && (this.ex.hummed[key] || this.ex.done[key]);
-      out.push({ key: `ex_${key}`, pos: r.pos, cls: 'anomaly', name: core ? '◆ LANTERN WRECK · CORE DETECTED' : seen === 2 || r.a.type === 'spire' ? `${T.icon} ${T.name.toUpperCase()}` : '? UNKNOWN SIGNAL', edge: seen === 2 || core });
+      out.push({ key: `ex_${key}`, pos: r.pos, cls: 'anomaly', name: core ? '◆ LANTERN WRECK · CORE DETECTED' : seen === 2 || r.a.type === 'spire' ? `${this.knowsLantern() || r.a.type !== 'wreck' ? T.icon : '▣'} ${this.typeName(r.a.type).toUpperCase()}` : '? UNKNOWN SIGNAL', edge: seen === 2 || core });
     }
     return out;
   }
@@ -460,7 +465,7 @@ export class ExploreManager {
       if (key === 'k7') { out.push({ kind: 'anomaly', anomaly: r.a, pos: r.pos, name: 'Site K-7', color: '#ffc040', r: 6, arrive: 140 }); continue; }
       const seen = this.ex.seen[key]; if (!seen && r.a.type !== 'spire') continue;
       const core = r.a.type === 'wreck' && this.ex.resonator && this.hasCore(key) && (this.ex.hummed[key] || this.ex.done[key]);
-      out.push({ kind: 'anomaly', anomaly: r.a, pos: r.pos, name: core ? 'Lantern wreck · core detected' : seen === 2 || r.a.type === 'spire' ? TYPES[r.a.type].name : 'Unknown signal', color: core ? '#c8f56a' : '#7fe8ff', r: 5, arrive: 120 });
+      out.push({ kind: 'anomaly', anomaly: r.a, pos: r.pos, name: core ? 'Lantern wreck · core detected' : seen === 2 || r.a.type === 'spire' ? this.typeName(r.a.type) : 'Unknown signal', color: core ? '#c8f56a' : '#7fe8ff', r: 5, arrive: 120 });
     }
     return out;
   }

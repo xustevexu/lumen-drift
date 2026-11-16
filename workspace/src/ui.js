@@ -751,7 +751,7 @@ export class UI {
     const gate = ex.unlocked ? `<p>✧ The dormant gate in <b>${g.galaxy.systems[g.galaxy.hostId].name}</b> is open: Lumen's Rest is on your chart.</p>` : `<p>Recover <b>${FRAGMENTS_TO_UNLOCK}</b> logs to wake the dormant gate (${n}/${FRAGMENTS_TO_UNLOCK}).</p>`;
     return `<div class="card news"><div><h3>Exploration</h3><p>Every system hides anomalies: wrecks, crystal pockets, beacons, rifts, guarded caches. Your sensors pick them up at close range; a scanner probe charts a whole system at once (launch from the MAP).</p>
       <p>Probes: <b>${ex.probes}/${PROBE_MAX}</b> <button class="sbtn buy" data-act="probe" ${ex.probes < PROBE_MAX && g.state.credits >= PROBE_PRICE ? '' : 'disabled'}>BUY PROBE · ◈ ${PROBE_PRICE}</button></p>
-      <h3 style="margin-top:6px">📜 Exodus Logs</h3>${gate}${logs || '<p><small>No logs recovered yet. Look for Lantern Fleet wrecks.</small></p>'}</div></div>`;
+      ${g.explore.knowsLantern() ? `<h3 style="margin-top:6px">📜 Exodus Logs</h3>${gate}${logs || '<p><small>No logs recovered yet. Look for Lantern Fleet wrecks.</small></p>'}` : ''}</div></div>`;
   }
   outpostsHTML() {
     const g = this.g, s = g.state, max = maxOutposts(s), ft = factionTier(standingWith(s, g.sysInfo.eco));
