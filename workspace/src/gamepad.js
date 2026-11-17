@@ -116,6 +116,8 @@ export class GamepadInput {
     const S = { p, btn, val, hit, lx, ly, rx, ry, dt };
     // right stick = free-look around the ship in flight (springs back when released); nothing else in flight uses it
     g.freeLook.x = ctx === 'flight' ? rx : 0; g.freeLook.y = ctx === 'flight' ? ry : 0;
+    // docked: a character's message floats over the station screen; A answers it before working the menus
+    if (ctx === 'station' && g.story.ackPending && hit(B.A)) { g.story.ack(); this.prev = now; return; }
     if (ctx === 'flight') this.flight(S);
     else if (ctx === 'map') this.mapNav(S);
     else if (ctx) this.menuNav(S, ctx);

@@ -63,7 +63,7 @@ export class UI {
     this.onSystemChanged();
   }
 
-  storyOk() { return $('dialog').classList.contains('hidden') && $('pause').classList.contains('hidden'); }
+  storyOk() { return $('dialog').classList.contains('hidden') && $('pause').classList.contains('hidden') && $('mapOv').classList.contains('hidden'); }
   modalOpen() { return !$('station').classList.contains('hidden') || !$('mapOv').classList.contains('hidden') || !$('pause').classList.contains('hidden') || !$('dialog').classList.contains('hidden'); }
 
   // ------------------------------------------------------------ input
@@ -138,7 +138,7 @@ export class UI {
       if (this.g.mode !== 'play') return;
       if (k === 'escape') { this.togglePause(); return; }
       if (this.modalOpen()) return;
-      if ((k === 'enter' || k === ' ') && this.g.story.ackPending) { e.preventDefault(); this.g.story.ack(); return; }
+      if (k === 'enter' && this.g.story.ackPending) { e.preventDefault(); this.g.story.ack(); return; }
       if (!keys.has(k)) {
         if (k === ' ') inp.fire = true;
         if (k === 'shift') inp.boost = true;

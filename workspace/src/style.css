@@ -490,3 +490,6 @@ body.gamepad .row:not(.head):has(.gp-focus) .nm { color: #ffd2b8; }
 #hud.docked #lookZone { display: none; }
 @media (max-width: 900px) { #lookZone { width: 45%; } }
 #topStack, #autopilot, #raidBanner { z-index: 5; }
+/* character messages that wait for you: a bigger portrait to take in */
+#comm.ack .comm-pic img.portrait, #topStack #comm.ack .comm-pic img.portrait { width: 84px; height: 84px; }
+#comm.ack .comm-text { font-size: 13.5px; }

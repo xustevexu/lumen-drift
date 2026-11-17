@@ -151,7 +151,7 @@ export class Story {
   comm(id, text, opts = {}) {
     const s = this.state;
     if (opts.once) { if (s.story.said[opts.once]) return; s.story.said[opts.once] = 1; }
-    this.queue.push({ id, text, chatter: false, ack: !!opts.ack });
+    this.queue.push({ id, text, chatter: false, ack: opts.ack !== false });
     this.log(CAST[id].name, text, opts.kind || 'info');
   }
   // drop calm radio chatter that hasn't played yet (called when a fight starts)
