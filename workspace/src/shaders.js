@@ -149,13 +149,14 @@ export function planetMaterial(p) {
       uAtmo: { value: new THREE.Color(...p.atmo) },
       uSeed: { value: p.seed }, uType: { value: typeId }, uCloud: { value: p.cloud }, uIce: { value: p.type === 'ice' ? 0.0 : 1.0 },
       uSunCol: { value: new THREE.Color(1, 0.95, 0.88) },
+      uRad: { value: p.radius },
     },
     vertexShader: /* glsl */ `
-      varying vec3 vN; varying vec3 vObj; varying vec3 vW;
-      void main(){ vObj = normalize(position); vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix)*normal); gl_Position = projectionMatrix*viewMatrix*w; }`,
+      varying vec3 vN; varying vec3 vObj; varying vec3 vW; varying vec3 vC;
+      void main(){ vObj = normalize(position); vC = (modelMatrix*vec4(0.0,0.0,0.0,1.0)).xyz; vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix)*normal); gl_Position = projectionMatrix*viewMatrix*w; }`,
     fragmentShader: NOISE + /* glsl */ `
-      uniform float uTime, uSeed, uType, uCloud, uIce; uniform vec3 uSun, uA, uB, uC, uAtmo, uSunCol;
-      varying vec3 vN; varying vec3 vObj; varying vec3 vW;
+      uniform float uTime, uSeed, uType, uCloud, uIce, uRad; uniform vec3 uSun, uA, uB, uC, uAtmo, uSunCol;
+      varying vec3 vN; varying vec3 vObj; varying vec3 vW; varying vec3 vC;
       void main(){
         vec3 p = vObj*2.2 + uSeed;
         vec3 col; float spec = 0.0;
@@ -191,7 +192,12 @@ export function planetMaterial(p) {
         float rim = pow(1.0 - max(dot(V, N), 0.0), 3.0);
         vec3 H = normalize(L+V);
         float sp = pow(max(dot(N,H),0.0), 60.0) * spec * (1.0-c) * 0.8;
-        vec3 lit = col*uSunCol*(0.025 + diff*1.15) + uSunCol*sp + uAtmo*rim*smoothstep(-0.35, 0.5, ndl)*0.9;
+        // close to the surface: kill the grazing-angle rim haze and tame bright ice/cloud albedo
+        float alt = length(cameraPosition - vC) - uRad;   // metres above surface
+        float near = 1.0 - smoothstep(150.0, 900.0, alt);
+        rim *= 1.0 - 0.9*near; sp *= 1.0 - 0.7*near;
+        col *= 1.0 - 0.35*near*smoothstep(0.55, 0.9, max(col.r, max(col.g, col.b)));
+        vec3 lit = col*uSunCol*(0.025 + diff*(1.15 - 0.3*near)) + uSunCol*sp + uAtmo*rim*smoothstep(-0.35, 0.5, ndl)*0.9;
         // terminator warm band
         lit += uAtmo*vec3(1.0,0.55,0.35)*smoothstep(0.18,0.0,abs(ndl))*0.08;
         gl_FragColor = vec4(lit, 1.0);
@@ -201,18 +207,19 @@ export function planetMaterial(p) {
   });
 }
 
-export function atmosphereMaterial(color, sunUniform) {
+export function atmosphereMaterial(color, sunUniform, radius = 1) {
   return new THREE.ShaderMaterial({
-    uniforms: { uSun: sunUniform, uColor: { value: new THREE.Color(...color) } },
-    vertexShader: /* glsl */ `varying vec3 vN; varying vec3 vW; void main(){ vec4 w = modelMatrix*vec4(position,1.0); vW=w.xyz; vN=normalize(mat3(modelMatrix)*normal); gl_Position=projectionMatrix*viewMatrix*w; }`,
+    uniforms: { uSun: sunUniform, uColor: { value: new THREE.Color(...color) }, uRad: { value: radius } },
+    vertexShader: /* glsl */ `varying vec3 vN; varying vec3 vW; varying vec3 vC; void main(){ vC=(modelMatrix*vec4(0.0,0.0,0.0,1.0)).xyz; vec4 w = modelMatrix*vec4(position,1.0); vW=w.xyz; vN=normalize(mat3(modelMatrix)*normal); gl_Position=projectionMatrix*viewMatrix*w; }`,
     fragmentShader: /* glsl */ `
-      uniform vec3 uSun, uColor; varying vec3 vN; varying vec3 vW;
+      uniform vec3 uSun, uColor; uniform float uRad; varying vec3 vN; varying vec3 vW; varying vec3 vC;
       void main(){
         vec3 N=normalize(vN); vec3 V=normalize(cameraPosition-vW); vec3 L=normalize(uSun-vW);
         float f = 1.0 - abs(dot(V,N));
         float glow = pow(f, 4.0)*1.4 + pow(f, 12.0)*1.2;
         float lit = smoothstep(-0.45, 0.6, dot(N,L));
-        float a = glow*lit;
+        float alt = length(cameraPosition - vC) - uRad;
+        float a = glow*lit*mix(0.12, 1.0, smoothstep(100.0, 900.0, alt));
         gl_FragColor = vec4(uColor*a*1.6, a);
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.FrontSide,

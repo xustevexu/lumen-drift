@@ -1277,6 +1277,15 @@ export class Game {
     this.audio.listener = this.camera.position;
     this.post.grade.uniforms.uDamage.value = Math.max(0, this.post.grade.uniforms.uDamage.value - dt * 1.5);
     if (this.mode === 'play') this.ui.update(dt);
+    // dim exposure + bloom when hugging a planet surface (ore sites were washing out)
+    let near = 0; const cp = this.camera.position;
+    for (const pl of this.world.planets || []) {
+      const alt = cp.distanceTo(pl.pos) - pl.radius;   // metres above surface
+      near = Math.max(near, 1 - THREE.MathUtils.smoothstep(alt, 150, 900));
+    }
+    this._nearPl = (this._nearPl ?? 0) + (near - (this._nearPl ?? 0)) * Math.min(1, dt * 3);
+    this.renderer.toneMappingExposure = 1.05 - 0.3 * this._nearPl;
+    this.post.bloom.strength = 0.7 - 0.4 * this._nearPl;
     this.post.render(dt, globalUniforms.uTime.value);
   }
 

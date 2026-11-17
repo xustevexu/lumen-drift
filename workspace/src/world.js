@@ -135,7 +135,7 @@ export class World {
       mesh.material.uniforms.uSunCol.value.setRGB(...st.color).lerp(new THREE.Color(1, 1, 1), 0.5);
       mesh.rotation.z = rng.range(-0.3, 0.3);
       grp.add(mesh);
-      const atmo = new THREE.Mesh(new THREE.SphereGeometry(p.radius * 1.06, 64, 32), atmosphereMaterial(p.atmo, this.sunUniform));
+      const atmo = new THREE.Mesh(new THREE.SphereGeometry(p.radius * 1.06, 64, 32), atmosphereMaterial(p.atmo, this.sunUniform, p.radius));
       grp.add(atmo);
       if (p.ring) {
         const rg = new THREE.RingGeometry(p.radius * 1.45, p.radius * 2.3, 128, 1);
@@ -155,8 +155,11 @@ export class World {
       const pos = pl.pos.clone().addScaledVector(dir, pl.radius - 2);
       const ore = pl.data.depositOre;
       const col = new THREE.Color(COMM[ore].color);
+      // pale ores (ice) were blowing out to white under bloom — scale glow by brightness
+      const lum = 0.2126 * col.r + 0.7152 * col.g + 0.0722 * col.b;
+      const dim = THREE.MathUtils.clamp(1.25 - lum, 0.35, 1);
       const g = new THREE.Group(); g.position.copy(pos); g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-      const cm = new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(0.5), emissive: col, emissiveIntensity: 1.8, roughness: 0.2, metalness: 0.3 });
+      const cm = new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(0.5), emissive: col, emissiveIntensity: 1.8 * dim, roughness: 0.2, metalness: 0.3 });
       for (let k = 0; k < 9; k++) {
         const c = new THREE.Mesh(new THREE.OctahedronGeometry(1, 0), cm);
         const h = rng.range(8, 22);
@@ -165,12 +168,12 @@ export class World {
         c.rotation.set(rng.range(-0.4, 0.4), rng.range(0, 3), rng.range(-0.4, 0.4));
         g.add(c);
       }
-      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTexture(), color: col, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 }));
-      glow.position.y = 14; glow.scale.setScalar(90); g.add(glow);
-      const ringM = new THREE.Mesh(new THREE.RingGeometry(36, 40, 48), new THREE.MeshBasicMaterial({ color: col.clone().multiplyScalar(2), transparent: true, opacity: 0.6, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTexture(), color: col, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.55 * dim }));
+      glow.position.y = 14; glow.scale.setScalar(70); g.add(glow);
+      const ringM = new THREE.Mesh(new THREE.RingGeometry(36, 40, 48), new THREE.MeshBasicMaterial({ color: col.clone().multiplyScalar(1 + dim), transparent: true, opacity: 0.45 * dim, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
       ringM.rotation.x = -Math.PI / 2; ringM.position.y = 3; g.add(ringM);
       this.root.add(g);
-      this.deposits.push({ planet: pl, pos, ore, max: 90, amount: 90, group: g, glow, ring: ringM, radius: 20, name: `${pl.data.name} deposit`, kind: 'deposit', regenDay: day });
+      this.deposits.push({ planet: pl, pos, ore, max: 90, amount: 90, group: g, glow, ring: ringM, dim, radius: 20, name: `${pl.data.name} deposit`, kind: 'deposit', regenDay: day });
     });
 
     // --- Station ---
@@ -288,7 +291,7 @@ export class World {
     this.station.lights.forEach((l, i) => (l.visible = Math.sin(t * 3 + i * 0.8) > -0.2));
     this.station.beacon.material.opacity = 0.6 + 0.4 * Math.sin(t * 2.0);
     for (const g of this.gates) { g.group.rotation.z += dt * 0.03; g.portal.rotation.z -= dt * 0.1; }
-    for (const d of this.deposits) { d.ring.scale.setScalar(1 + 0.15 * Math.sin(t * 2)); d.glow.material.opacity = 0.35 + 0.65 * (d.amount / d.max); }
+    for (const d of this.deposits) { d.ring.scale.setScalar(1 + 0.15 * Math.sin(t * 2)); d.glow.material.opacity = (0.2 + 0.45 * (d.amount / d.max)) * (d.dim ?? 1); }
     for (const d of this.derelicts) { const f = Math.sin(t * 13 + d.seed) > 0.2 ? 1 : 0.15; d.glow.material.opacity = f; d.lamp.visible = f > 0.5; }
     // rock spin for nearby fields
     for (const f of this.fields) {
