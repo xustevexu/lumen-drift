@@ -711,15 +711,16 @@ export class UI {
   outfitHTML() {
     const g = this.g, rec = g.activeShipRec(), fab = hasFabricator(g.sysInfo.eco), U = (k) => unlocked(g.state, k);
     let h = `<p style="margin:2px 4px 10px;font:700 13px var(--font)">Upgrading: <b>${HULLS[rec.hull].name}</b> (${HULLS[rec.hull].cls}) — each ship keeps its own modules.</p><div class="cards">`;
-    h = (U('factions') ? this.factionTechHTML(rec) : '') + (U('fabrication') ? this.fabricationHTML(rec, fab) : '') + h;
+    if (!g.tut.active) h = (U('factions') ? this.factionTechHTML(rec) : '') + (U('fabrication') ? this.fabricationHTML(rec, fab) : '') + h;
     for (const k of MODULE_ORDER) {
       const M = MODULES[k], lvl = rec.mods[k];
       const next = lvl < 3 ? lvl + 1 : null;
       const price = next ? modulePrice(rec.hull, k, next) : 0;
       const stamps = [1, 2, 3].map((i) => `<i class="${i <= lvl ? 'on' : ''}"></i>`).join('');
-      h += `<div class="card"><h3>${M.name}<span class="lvl">${stamps}</span></h3><p>${M.desc}</p>
+      const tutPick = g.tut.active && g.state.tut.step === 4 && k === g.tut.recommendMod();
+      h += `<div class="card${tutPick ? ' tut-card' : ''}"><h3>${M.name}<span class="lvl">${stamps}</span></h3><p>${M.desc}</p>
         <div class="delta">${statLine(k, lvl, rec.hull)}${next ? ` → <b>${statLine(k, next, rec.hull)}</b>` : ' · MAX'}</div>
-        ${next ? `<button class="pbtn ${g.state.credits >= price ? 'primary' : 'secondary'}${g.tut.active && g.state.tut.step === 4 && k === g.tut.recommendMod() ? ' tut-glow' : ''}" style="font-size:14px;padding:9px" data-act="upgrade" data-arg="${k}" ${g.state.credits >= price ? '' : 'disabled'}>INSTALL MK${next} · ◈ ${fmt(price)}</button>` : '<button class="pbtn secondary" disabled>FULLY UPGRADED</button>'}
+        ${next ? `<button class="pbtn ${g.state.credits >= price ? 'primary' : 'secondary'}${tutPick ? ' tut-glow' : ''}" style="font-size:14px;padding:9px" data-act="upgrade" data-arg="${k}" ${g.state.credits >= price ? '' : 'disabled'}>INSTALL MK${next} · ◈ ${fmt(price)}</button>` : '<button class="pbtn secondary" disabled>FULLY UPGRADED</button>'}
         ${next && fab && U('fabrication') ? (() => { const mats = moduleMats(next), fc = Math.round(price * 0.45 / 10) * 10, ok = haveMats(g.player.cargo, mats) && g.state.credits >= fc; return `<button class="pbtn secondary" style="font-size:12px;padding:7px" data-act="fabmod" data-arg="${k}" ${ok ? '' : 'disabled'}>FABRICATE · ◈ ${fmt(fc)} + ${matsText(mats)}</button>`; })() : ''}
       </div>`;
     }

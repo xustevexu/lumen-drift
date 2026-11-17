@@ -520,3 +520,6 @@ body.tut-calm #btnFire, body.tut-calm #btnMissile, body.tut-calm #btnTarget { di
 .tut-toggle.off { opacity: .75; }
 .pitch { font: 700 13px/1.35 var(--font); color: var(--ink); background: var(--paper); border: 2px solid var(--line); box-shadow: 3px 3px 0 var(--shadow); padding: 6px 9px; max-width: 360px; align-self: flex-start; }
 .jr.done { opacity: .6; }
+
+.card.tut-card { border: 3px solid #ffd34a !important; box-shadow: 0 0 16px 3px rgba(255,211,74,.5), 3px 3px 0 var(--shadow); animation: tutcard 1.2s ease-in-out infinite; }
+@keyframes tutcard { 50% { box-shadow: 0 0 6px 1px rgba(255,211,74,.25), 3px 3px 0 var(--shadow); } }

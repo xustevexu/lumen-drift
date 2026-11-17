@@ -299,7 +299,7 @@ export class Story {
     this.g.tut.updateTabs();
     const s = this.state, U = s.unlocks, g = this.g, rank = pilotRank(s), eco = g.sysInfo.eco;
     // one new feature at a time, at least 40 s apart, so they don't pile up
-    const open = (k, id, text) => { if (U[k]) return; const now = performance.now() / 1000; if (now - (this.lastOpen || -1e9) < 40) return; this.lastOpen = now; U[k] = true; this.comm(id, text, { kind: 'good' }); g.save(); };
+    const open = (k, id, text) => { if (U[k]) return; if (s.tut && s.tut.gradDay != null && s.day <= s.tut.gradDay) return; const now = performance.now() / 1000; if (now - (this.lastOpen || -1e9) < 40) return; this.lastOpen = now; U[k] = true; this.comm(id, text, { kind: 'good' }); g.save(); };
     if (!U.events && s.day >= 2) open('events', 'wick', 'Heads up: the sector is waking up. Distress beacons, ore surges and market shocks will pop up from today. Check Sector News in station Services, and the galaxy map for icons.');
     if (!U.contracts && (s.stats.trades >= 1 || s.day >= 2)) open('contracts', isAccordEco(eco) ? 'hale' : 'kask', isAccordEco(eco) ? 'Station boards post contracts: cargo runs, passengers, supply orders. Honest work for an independent. The Contracts tab is open at every station.' : "Want steady coin? Stations post contracts: haul it, fly 'em, supply it. Check the Contracts tab next time you dock. Pays better than rocks.");
     if (!U.factions && s.stats.contracts >= 1) open('factions', 'wick', 'First contract done. Stations belong to factions, and they remember who helps them. The Accord (Institute, Combine, Cooperative) runs the patrolled core; the Fringe (Union, Settlers) fends for itself. Standing is in Services → Factions.');

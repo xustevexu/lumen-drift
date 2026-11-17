@@ -131,19 +131,20 @@ export class Tutorial {
 
   graduate(skipped = false) {
     const g = this.g, s = this.s, t = s.tut;
-    t.done = true; t.step = TUT_STEPS;
+    t.done = true; t.step = TUT_STEPS; t.gradDay = s.day; // new-feature messages wait until tomorrow
     if (s.story.debt > 0) s.story.debtCheck = s.day + 7; // the marker's clock starts now
     document.body.classList.remove('tut-calm');
     this.hide();
     g.story.lastOpen = performance.now() / 1000; // space out the first unlock messages
     if (!skipped) {
-      g.story.comm('wick', "That's the whole loop: mine or salvage, sell, upgrade, fly further. You're on your own now, pilot. Contracts, services and more open up as you go. When you're not sure what to do next, the JOURNAL has ideas.", { tut: true });
+      // one wrap-up from Wick (loop + where messages and goals live); the map was already covered in training
+      s.story.said['tip-map'] = 1; s.story.said['tip-log'] = 1;
+      g.story.comm('wick', `That's the whole loop: mine or salvage, sell, upgrade, fly further. You're on your own now, pilot. Every message is saved: to read them again, ${g.story.howTo('log')}. The JOURNAL in that same menu has ideas when you're not sure what to do next.`, { tut: true });
       g.audio.play('coins', { vol: 0.6 });
     }
     // the story was waiting politely: deliver what it wanted to say
     for (const [id, text, opts] of t.held) g.story.comm(id, text, { ...opts, once: null, tut: true });
     t.held = [];
-    g.story.tips();
     g.save();
     if (g.docked) g.ui.renderStation();
   }
