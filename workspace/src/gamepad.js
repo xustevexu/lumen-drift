@@ -109,6 +109,7 @@ export class GamepadInput {
     const lx = ax(0), ly = ax(1), rx = ax(2), ry = ax(3);
     const anyInput = now.some(Boolean) || lx || ly || rx || ry;
     if (anyInput) this.activate();
+    if (anyInput && g.mode === 'menu') g.startTheme();
     if (!this.active) { this.prev = now; return; }
     const ctx = this.context();
     if (ctx !== 'flight') this.release();

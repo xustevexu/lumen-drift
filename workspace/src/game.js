@@ -116,6 +116,7 @@ export class Game {
     this.renderer.compile(this.scene, this.camera);
     this.mode = 'menu';
     this.ui.showReady(this.hasSave);
+    this.armTheme();
     this.last = performance.now();
     this.renderer.setAnimationLoop(() => this.frame());
     window.__game = this;
@@ -161,6 +162,16 @@ export class Game {
     if (this.fx) this.fx.particles.points.material.uniforms.uPx.value = pr * (h / 800);
   }
 
+  // title-screen theme: browsers only allow sound after the first click, tap, key or button press
+  startTheme() {
+    if (this.mode !== 'menu' || !this.state.sound) return;
+    this.audio.unlock(); this.audio.setEnabled(true); this.audio.setMusic('theme');
+  }
+  armTheme() {
+    const go = () => { this.startTheme(); for (const ev of ['pointerdown', 'keydown']) window.removeEventListener(ev, go, true); };
+    for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, go, true);
+    if (this.audio.ctx.state === 'running') this.startTheme();
+  }
   startGame(fresh, origin = null) {
     if (fresh) {
       clearAuto();

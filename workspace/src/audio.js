@@ -1,5 +1,5 @@
 const FILES = {
-  calm: './audio/bgm_calm.mp3', battle: './audio/bgm_battle.mp3',
+  calm: './audio/bgm_calm.mp3', battle: './audio/bgm_battle.mp3', theme: './audio/bgm_theme.mp3',
   beam: './audio/sfx_beam.mp3', mine: './audio/sfx_mine.mp3', missile: './audio/sfx_missile.mp3',
   explosion: './audio/sfx_explosion.mp3', click: './audio/sfx_click.mp3', coins: './audio/sfx_coins.mp3',
   warp: './audio/sfx_warp.mp3', alarm: './audio/sfx_alarm.mp3',
@@ -113,8 +113,9 @@ export class Audio {
     this.current = name;
     const b = this.buffers[name]; if (!b) return;
     const s = this.ctx.createBufferSource(); s.buffer = b; s.loop = true;
+    if (name === 'theme') { s.loopStart = 0.03; s.loopEnd = b.duration - 0.03; } // skip the MP3 encoder padding so the loop is seamless
     const g = this.ctx.createGain(); g.gain.value = 0; s.connect(g); g.connect(this.musicBus); s.start();
-    g.gain.setTargetAtTime(name === 'battle' ? 0.75 : 1, now, 1.2);
+    g.gain.setTargetAtTime(name === 'battle' ? 0.75 : 1, now, name === 'theme' ? 2.5 : 1.2);
     this.music[name] = { s, g };
   }
 }
