@@ -1298,7 +1298,7 @@ export class UI {
       const d = (sel.dest || sel.pos).distanceTo(g.player.pos);
       const here = g.state.missions.filter((m) => m.dest.sys === g.state.systemId && ((sel.kind === 'station' && m.dest.kind === 'station') || (sel.kind === 'planet' && m.dest.kind === 'planet' && g.world.deposits[m.dest.planet] === sel.deposit)));
       const ms = here.length ? `<p style="color:#9a6a00"><b>★ Contract drop-off:</b> ${here.map((m) => m.title).join('; ')}</p>` : '';
-      box.innerHTML = `<h4>${sel.name}</h4>${extra}${ms}<p>Distance ${this.dist(d)}</p><button class="pbtn primary" data-act="autopilot">AUTOPILOT</button>`;
+      box.innerHTML = `<h4>${sel.name}</h4><button class="pbtn primary" data-act="autopilot">AUTOPILOT · ${this.dist(d)}</button>${extra}${ms}`; // the button first: always visible on short screens
     } else {
       const s = g.galaxy.systems[sel.sys]; const intel = g.state.intel[s.id];
       const path = this.route(g.state.systemId, s.id);
@@ -1319,7 +1319,7 @@ export class UI {
       const ft = factionTier(standingWith(g.state, s.eco));
       const es = systemExploreStatus(g.state, g.galaxy, s.id), exploreTxt = `<p><small>Anomalies: ${es.seen} of ${es.total} found, ${es.done} investigated</small></p>`;
       const SA = g.state.siege.active, siegeTxt = SA && SA.phase !== 'done' && SA.target.sys === s.id ? `<p style="color:#ff8a5c"><b>⚔ Siege:</b> ${g.siege.newsLine()}</p>` : '';
-      box.innerHTML = `<h4>${s.name}</h4><p><b>${isAccordEco(s.eco) ? '🛡 ACCORD SPACE' : 'THE FRINGE'}</b> · ${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * (isAccordEco(s.eco) ? 55 : 115))}%/day</p><p><b style="color:${FACTIONS[s.eco].color}">${FACTIONS[s.eco].name}</b> · you are <b>${ft.name}</b>${ft.level <= -1 ? ' <span style="color:#ff6b4a">(enforcers may hunt you)</span>' : ''}</p>${siegeTxt}${exploreTxt}${evs}${ms}${rows}${btn}`;
+      box.innerHTML = `<h4>${s.name}</h4>${btn}<p><b>${isAccordEco(s.eco) ? '🛡 ACCORD SPACE' : 'THE FRINGE'}</b> · ${ECONOMIES[s.eco].name} · outlaw risk ${Math.round(s.danger * (isAccordEco(s.eco) ? 55 : 115))}%/day</p><p><b style="color:${FACTIONS[s.eco].color}">${FACTIONS[s.eco].name}</b> · you are <b>${ft.name}</b>${ft.level <= -1 ? ' <span style="color:#ff6b4a">(enforcers may hunt you)</span>' : ''}</p>${siegeTxt}${exploreTxt}${evs}${ms}${rows}`;
     }
   }
   mapAction(act) {
