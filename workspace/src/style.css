@@ -501,3 +501,22 @@ body.gamepad .row:not(.head):has(.gp-focus) .nm { color: #ffd2b8; }
   .map-info h4 { font-size: 14px; }
   .map-info .pbtn { padding: 7px; font-size: 13px; }
 }
+
+/* ---- tutorial ---- */
+#objective { position: fixed; z-index: 45; left: 50%; transform: translateX(-50%); bottom: calc(14px + var(--safe-b)); max-width: min(92vw, 520px); display: flex; align-items: center; gap: 8px; background: var(--paper); color: var(--ink); border: 2px solid #ffd34a; box-shadow: 3px 3px 0 var(--shadow); padding: 6px 10px; font: 800 13px/1.25 var(--font); pointer-events: none; }
+#objective .ob-step { flex: none; font: 900 10px var(--display); letter-spacing: 1px; color: #141826; background: #ffd34a; padding: 3px 6px; }
+#objective.hidden { display: none; }
+/* in flight it sits just above the bottom-centre, clear of the stick (left) and buttons (right) */
+@media (max-width: 900px) and (orientation: landscape) { #objective:not(.docked) { bottom: auto; top: calc(48px + var(--safe-t)); left: auto; right: calc(10px + var(--safe-r)); transform: none; max-width: 38vw; flex-direction: column; align-items: flex-start; gap: 3px; font-size: 12px; } }
+.mk.tut { color: #ffd34a; z-index: 2; font-size: 11px; }
+.mk.tut .ic { width: 16px; height: 16px; border-width: 3px; animation: evpulse .8s steps(2) infinite; }
+.tut-glow { animation: tutglow 1.1s ease-in-out infinite; outline: 3px solid #ffd34a; outline-offset: 2px; box-shadow: 0 0 14px 4px rgba(255,211,74,.55) !important; }
+@keyframes tutglow { 50% { outline-color: rgba(255,211,74,.15); filter: brightness(1.15); } }
+.tab.hidden { display: none; }
+.tab.new { position: relative; }
+.tab.new::after { content: 'NEW'; position: absolute; top: -8px; right: -6px; font: 900 9px var(--display); background: #ffd34a; color: #141826; padding: 1px 4px; border: 1px solid #141826; }
+body.tut-calm #btnFire, body.tut-calm #btnMissile, body.tut-calm #btnTarget { display: none; }
+.tut-toggle { display: block; margin: 8px auto 0; }
+.tut-toggle.off { opacity: .75; }
+.pitch { font: 700 13px/1.35 var(--font); color: var(--ink); background: var(--paper); border: 2px solid var(--line); box-shadow: 3px 3px 0 var(--shadow); padding: 6px 9px; max-width: 360px; align-self: flex-start; }
+.jr.done { opacity: .6; }

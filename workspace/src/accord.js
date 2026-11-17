@@ -72,7 +72,7 @@ export class AccordManager {
       if (!a.firing && a.beam) a.beam.visible = false;
       a.updateMotion(dt, g.world); a.updateVisual(dt);
     }
-    if (!p.dead && !g.warp) this.checkScan();
+    if (!p.dead && !g.warp && !g.tut.active) this.checkScan();
   }
   markers() {
     const p = this.g.player;

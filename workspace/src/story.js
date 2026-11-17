@@ -60,6 +60,7 @@ export const ORIGINS = {
     name: 'The Deserter', tag: 'Ex-Accord Patrol pilot', speaker: 'hale',
     blurb: "You flew for the Accord Patrol until the night you didn't. You walked out with a Patrol cipher key and nothing else. The core worlds remember.",
     perks: 'Starts in the Fringe · Beam Mk1 + Missile rack Mk1 · Accord factions start Unfriendly · Free Settlers warm to you',
+    short: ['You flew for the Accord Patrol, until you saw what its order costs the Fringe.', 'You left without a word, and with a Patrol cipher key in your pocket.'],
     intro: [
       'The Accord keeps the core worlds lit, fed and safe.',
       'You were one of the pilots who kept it that way, until you saw what the order costs the Fringe.',
@@ -72,6 +73,7 @@ export const ORIGINS = {
     name: 'The Debtor', tag: 'Fringe hauler in hock', speaker: 'vex',
     blurb: "Your ship was paid for with Red Wake money. Twenty thousand credits of it. Vex Tannery holds your marker, and Vex always collects.",
     perks: 'Starts in the Fringe · Mining laser Mk1 + Cargo Mk1 · ◈3,500 in hand · owes the Red Wake ◈20,000',
+    short: ['You borrowed twenty thousand credits from the Red Wake to buy a used Wren.', 'Vex Tannery holds your marker. Pay it off, before it pays you a visit.'],
     intro: [
       'Out in the Fringe, nobody gives you a ship. You buy one, or you borrow.',
       'You borrowed. From the Red Wake.',
@@ -84,6 +86,7 @@ export const ORIGINS = {
     name: 'The Heir', tag: 'Descendant of the Lantern Fleet', speaker: 'ama',
     blurb: "Your grandmother left you a ship, a debt of curiosity, and an Exodus Log nobody else has seen. Everyone wants what it points to.",
     perks: 'Starts at the core · Sensors Mk1 · 2 scanner probes · already holds 1 Exodus Log',
+    short: ['Your grandmother left you her Wren, and a log core that plays a voice from the old Lantern Fleet.', 'The old songs say the logs wake something. Plenty of people would love to know what.'],
     intro: [
       'Three hundred years ago the Lantern Fleet fled a dying sun and lit these lanes.',
       'Your grandmother swore she was descended from its engineers. Nobody believed her.',
@@ -151,6 +154,8 @@ export class Story {
   comm(id, text, opts = {}) {
     const s = this.state;
     if (opts.once) { if (s.story.said[opts.once]) return; s.story.said[opts.once] = 1; }
+    // during the tutorial only Wick's training lines play; everything else waits for graduation
+    if (this.g.tut && this.g.tut.active && !opts.tut) { s.tut.held.push([id, text, { ack: opts.ack, kind: opts.kind }]); return; }
     this.queue.push({ id, text, chatter: false, ack: opts.ack !== false });
     this.log(CAST[id].name, text, opts.kind || 'info');
   }
@@ -160,6 +165,7 @@ export class Story {
     if (this.cur && this.cur.chatter) { this.cur = null; this.t = 0; const el = document.getElementById('comm'); if (el) el.classList.add('hidden'); }
   }
   chatter(name, text) {
+    if (this.g.tut && this.g.tut.active) return;
     if (this.queue.filter((q) => q.chatter).length >= 2) return; // never let chatter pile up
     this.queue.push({ id: null, name, text, chatter: true });
     this.log(`📻 ${name}`, text, '');
@@ -236,10 +242,13 @@ export class Story {
   }
   intro(id, onPick) {
     const o = ORIGINS[id];
-    const lines = o.intro.map((l, i) => `<p class="intro-line" style="animation-delay:${0.4 + i * 1.6}s">${l}</p>`).join('');
+    const lines = (o.short || o.intro).map((l, i) => `<p class="intro-line" style="animation-delay:${0.4 + i * 1.6}s">${l}</p>`).join('');
     const cs = this.g.state.p3 ? this.g.state.p3.callsign : 'Wren';
-    this.g.ui.dialog(`<img class="intro-pic" src="./portraits/${id}.jpg" alt=""><div class="intro-title">${o.name.toUpperCase()}</div>${lines}<div class="callsign"><label>YOUR CALLSIGN</label><input id="csInput" maxlength="20" value="${cs}"><button class="cs-roll" title="Random callsign">🎲</button></div>`, [{ label: 'BEGIN', primary: true, fn: () => { const v = (document.getElementById('csInput').value || '').trim().replace(/[<>&"]/g, '').slice(0, 20); this.pendingCallsign = v || cs; onPick(id); } }]);
+    this.g.ui.dialog(`<img class="intro-pic" src="./portraits/${id}.jpg" alt=""><div class="intro-title">${o.name.toUpperCase()}</div>${lines}<div class="callsign"><label>YOUR CALLSIGN</label><input id="csInput" maxlength="20" value="${cs}"><button class="cs-roll" title="Random callsign">🎲</button></div><button class="tut-toggle sbtn" type="button">TUTORIAL: ON</button>`, [{ label: 'BEGIN', primary: true, fn: () => { const v = (document.getElementById('csInput').value || '').trim().replace(/[<>&"]/g, '').slice(0, 20); this.pendingCallsign = v || cs; onPick(id); } }]);
     document.querySelector('.cs-roll').addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('csInput').value = randomCallsign(); });
+    this.skipTut = false;
+    const tt = document.querySelector('.tut-toggle');
+    tt.addEventListener('click', (e) => { e.stopPropagation(); this.skipTut = !this.skipTut; tt.textContent = this.skipTut ? "TUTORIAL: OFF (I've played before)" : 'TUTORIAL: ON'; tt.classList.toggle('off', this.skipTut); });
     const inp = document.getElementById('csInput'); for (const ev of ['keydown', 'keyup']) inp.addEventListener(ev, (e) => e.stopPropagation());
     // controller: start on BEGIN, not the dice
     const begin = [...document.getElementById('dialogBox').querySelectorAll('button.pbtn')].pop(); if (begin && this.g.pad && this.g.pad.active) this.g.pad.setFocus(begin);
@@ -265,6 +274,7 @@ export class Story {
   }
   // early tips, once per career (older saves get them once too)
   tips() {
+    if (this.g.tut.active) return; // given at graduation instead
     // one briefing that waits for you: the map, the message log and the journal
     setTimeout(() => { this.state.story.said['tip-map'] = 1; this.comm('wick', `Two things worth knowing. Your map shows this system and the whole galaxy; pick anything on it to set a course. To open it, ${this.howTo('map')}. And every message, mine included, is saved: to read them again, ${this.howTo('log')}. The JOURNAL in that same menu tracks your contracts and story goals.`, { once: 'tip-log', ack: true }); }, 2500);
   }
@@ -273,7 +283,8 @@ export class Story {
     const s = this.state, o = s.story.origin;
     if (this.pendingCallsign) { s.p3.callsign = this.pendingCallsign; this.pendingCallsign = null; }
     document.getElementById('dialog').classList.remove('introOv');
-    setTimeout(() => this.comm('wick', "Systems online. I'm Wick, your ship's assistant. Let's keep it simple to start: mine that asteroid field, or dock at the station and trade. I'll walk you through the rest when it matters.", { once: 'wick-hello', ack: true }), 1500);
+    if (this.g.tut.active) setTimeout(() => this.g.tut.update(0), 1200);
+    else setTimeout(() => this.comm('wick', "Systems online. I'm Wick, your ship's assistant. Keep it simple to start: drill an ore deposit on a planet or mine an asteroid field, then dock at the station and sell. I'll walk you through the rest when it matters.", { once: 'wick-hello', ack: true }), 1500);
     if (o === 'deserter') setTimeout(() => this.comm('hale', "Pilot. You left the Patrol without a word, and with a Patrol cipher key. Bring it back and we can talk. Until then, don't expect a warm welcome in Accord space.", { once: 'hale-1', kind: 'warn' }), 26000);
     if (o === 'debtor') setTimeout(() => this.comm('vex', "Morning, sunshine. Twenty thousand, remember? Pay me at any Fringe station. I check in every week. Don't make me come find you.", { once: 'vex-1', kind: 'warn' }), 26000);
     if (o === 'heir') setTimeout(() => this.comm('ama', "Child of the Lantern line. Your grandmother's log came to me through the old channels. The songs say the logs wake something out past the charts. Find the wrecks, and listen.", { once: 'ama-1' }), 26000);
@@ -284,8 +295,11 @@ export class Story {
     this.updateComms(dt);
     this.check -= dt; if (this.check > 0 || this.g.mode !== 'play') return;
     this.check = 1;
+    if (this.g.tut.active) return; // the tutorial owns the first minutes
+    this.g.tut.updateTabs();
     const s = this.state, U = s.unlocks, g = this.g, rank = pilotRank(s), eco = g.sysInfo.eco;
-    const open = (k, id, text) => { if (U[k]) return; U[k] = true; this.comm(id, text, { kind: 'good' }); g.save(); };
+    // one new feature at a time, at least 40 s apart, so they don't pile up
+    const open = (k, id, text) => { if (U[k]) return; const now = performance.now() / 1000; if (now - (this.lastOpen || -1e9) < 40) return; this.lastOpen = now; U[k] = true; this.comm(id, text, { kind: 'good' }); g.save(); };
     if (!U.events && s.day >= 2) open('events', 'wick', 'Heads up: the sector is waking up. Distress beacons, ore surges and market shocks will pop up from today. Check Sector News in station Services, and the galaxy map for icons.');
     if (!U.contracts && (s.stats.trades >= 1 || s.day >= 2)) open('contracts', isAccordEco(eco) ? 'hale' : 'kask', isAccordEco(eco) ? 'Station boards post contracts: cargo runs, passengers, supply orders. Honest work for an independent. The Contracts tab is open at every station.' : "Want steady coin? Stations post contracts: haul it, fly 'em, supply it. Check the Contracts tab next time you dock. Pays better than rocks.");
     if (!U.factions && s.stats.contracts >= 1) open('factions', 'wick', 'First contract done. Stations belong to factions, and they remember who helps them. The Accord (Institute, Combine, Cooperative) runs the patrolled core; the Fringe (Union, Settlers) fends for itself. Standing is in Services → Factions.');

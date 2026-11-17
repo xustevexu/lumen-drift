@@ -1,4 +1,5 @@
 import { unlocked, isAccordEco } from './story.js';
+import { tabOpen } from './tutorial.js';
 // is map item `it` the current selection? (system items by key, galaxy items by system id)
 const sameSel = (sel, it) => !!sel && (sel.key != null ? sel.key === it.key : sel.sys != null ? sel.sys === it.sys : sel.name === it.name);
 import { licenseNeeds, LICENSE_PRICE } from './accord.js';
@@ -338,9 +339,11 @@ export class UI {
     for (const t of g.traders) if (!t.dead && !(t.disabled && t.eventId) && t.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${t.uid}`, pos: t.pos, cls: 'trader' + (t === g.target ? ' target' : ''), name: t.name, edge: t === g.target });
     for (const o of g.outlaws) if (!o.dead && !o.isBase && o.pos.distanceTo(p.pos) < p.stats.sensor) list.push({ key: `s${o.uid}`, pos: o.pos, cls: 'outlaw' + (o === g.target ? ' target' : ''), name: o.name, edge: true });
     for (let i = 0; i < g.fx.crates.length; i++) { const c = g.fx.crates[i]; if (c.pos.distanceTo(p.pos) < 900) list.push({ key: `c${i}`, pos: c.pos, cls: 'crate', name: c.credits ? '◈ bounty' : 'cargo' }); }
+    const tt = g.tut.active && g.tut.target(); if (tt) list.push({ key: 'tut', pos: tt.pos, cls: 'tut', name: `▶ ${tt.name}`, edge: true });
     if (g.autopilot) list.push({ key: 'ap', pos: g.autopilot.pos, cls: 'station', name: `AP: ${g.autopilot.name}`, edge: true });
     for (const m of g.missionsAboard()) if (m.side && m.side.kind === 'detour' && !m.side.done && m.side.sys === g.state.systemId) list.push({ key: `side_${m.id}`, pos: g.landingPoint(m.side.planet), cls: 'mission', name: `SIDE REQUEST · ${m.side.name}`, edge: true });
     for (const t of this.missionTargets()) list.push({ key: `ms_${t.key}`, pos: t.pos, cls: 'mission', name: t.via ? `CONTRACT ROUTE${t.n > 1 ? ` ×${t.n}` : ''}` : `CONTRACT${t.n > 1 ? ` ×${t.n}` : ''} · ${t.name}`, edge: true });
+    if (tt) for (let i = list.length - 1; i >= 0; i--) if (list[i].key !== 'tut' && list[i].pos === tt.pos) list.splice(i, 1); // one marker, not two
     const seen = new Set();
     const box = $('markers');
     const placed = [];
@@ -406,7 +409,7 @@ export class UI {
   // ------------------------------------------------------------ overlays
   bindOverlays() {
     $('btnUndock').addEventListener('click', () => { this.g.audio.play('click', { vol: 0.5 }); this.g.undock(); });
-    $('stTabs').addEventListener('click', (e) => { const t = e.target.closest('.tab'); if (!t) return; this.stTab = t.dataset.tab; this.g.audio.play('click', { vol: 0.4 }); this.renderStation(); });
+    $('stTabs').addEventListener('click', (e) => { const t = e.target.closest('.tab'); if (!t) return; this.stTab = t.dataset.tab; if (this.g.state.tabs) this.g.state.tabs.seen[t.dataset.tab] = 1; this.g.audio.play('click', { vol: 0.4 }); this.renderStation(); });
     $('stBody').addEventListener('click', (e) => { const b = e.target.closest('button[data-act]'); if (b && !b.disabled) this.stationAction(b.dataset.act, b.dataset.arg, b.dataset.n); });
     $('btnMapClose').addEventListener('click', () => this.closeMap());
     $('mapTabs').addEventListener('click', (e) => { const t = e.target.closest('.tab'); if (!t) return; this.mapTab = t.dataset.tab; this.mapSel = null; this.renderMapTabs(); this.drawMap(); });
@@ -416,6 +419,13 @@ export class UI {
     $('btnResume').addEventListener('click', () => this.togglePause());
     $('btnLog').addEventListener('click', () => this.openLog());
     $('btnJournal').addEventListener('click', () => this.openJournal());
+    $('btnSkipTut').addEventListener('click', () => {
+      $('pause').classList.add('hidden');
+      this.dialog('<div class="ov-title">SKIP TUTORIAL?</div><p>Training ends now and the whole game opens up. You can\'t restart it in this career.</p>', [
+        { label: 'KEEP TRAINING', fn: () => $('pause').classList.remove('hidden') },
+        { label: 'SKIP IT', primary: true, fn: () => { this.g.tut.skip(); this.g.paused = false; } },
+      ]);
+    });
     $('btnQuit').addEventListener('click', () => {
       this.dialog('<div class="ov-title">QUIT TO TITLE?</div><p>Your game is saved first. Press CONTINUE on the title screen to pick up where you left off.</p>', [
         { label: 'SAVE & QUIT', primary: true, fn: () => { this.g.save(); location.reload(); } }, { label: 'CANCEL', fn: () => $('pause').classList.remove('hidden') }]);
@@ -444,6 +454,8 @@ export class UI {
     const where = (sys) => sys === sid ? 'this system' : `${g.galaxy.systems[sys].name}, ${dist[sys]} jump${dist[sys] === 1 ? '' : 's'}`;
     const A = s.story.arc;
     if (A && !A.done && A.stage === 'go') rows.push(`<div class="jr story"><b>📖 ${g.arcs.cardHTML().match(/📖 ([^<]*)/)[1]}</b><p>${(g.arcs.heir && s.story.origin === 'heir' && g.arcs.heir.goalText()) || A.goal || ''}</p>${A.target != null && A.target !== sid ? btn('SET COURSE', () => g.arcs.courseTo()) : ''}</div>`);
+    const next = this.whatNext();
+    if (next) rows.unshift(next);
     const ms = s.missions;
     rows.push(`<div class="ms-head"><span>CONTRACTS ${ms.length}/${MAX_ACTIVE}</span></div>`);
     if (!ms.length) rows.push('<p class="ms-empty">No active contracts. Pick some up from the Contracts board at any station.</p>');
@@ -468,6 +480,22 @@ export class UI {
       acts[Number(b.dataset.j)](); this.closeMap && 0;
     });
   }
+  // a few suggestions for a pilot fresh out of training, ticked off as they happen
+  whatNext() {
+    const g = this.g, s = g.state;
+    if (!s.tut || s.tabs.all) return '';
+    if (!s.tut.done) return `<div class="jr story"><b>🎓 Training</b><p>${g.tut.objective()}</p></div>`;
+    const rec = g.activeShipRec();
+    let cheap = null; for (const k of MODULE_ORDER) { const l = rec.mods[k]; if (l < 3) { const p = modulePrice(rec.hull, k, l + 1); if (!cheap || p < cheap.p) cheap = { k, p }; } }
+    const A = s.story.arc, ch = A ? A.ch || 0 : 0;
+    const goals = [
+      [(s.stats.upgrades || 0) >= 2, 'Save up for your next upgrade', cheap ? `Cheapest: ${MODULES[cheap.k].name} Mk${rec.mods[cheap.k] + 1} for ◈${fmt(cheap.p)}. Mine, salvage and sell.` : 'All modules maxed!'],
+      [s.stats.contracts >= 1, 'Take a contract', unlocked(s, 'contracts') ? 'Stations post paying jobs on the CONTRACTS board.' : 'The Contracts board opens soon. Keep selling and your name gets around.'],
+      [ch >= 2, 'Follow your story', 'Watch for messages from the people who know your name. Story goals show up here in the Journal.'],
+    ];
+    if (goals.every((x) => x[0])) return '';
+    return `<div class="ms-head"><span>WHAT NEXT?</span></div>` + goals.map(([done, t, p]) => `<div class="jr${done ? ' done' : ''}"><b>${done ? '✓' : '○'} ${t}</b>${done ? '' : `<p>${p}</p>`}</div>`).join('');
+  }
   togglePause() {
     const el = $('pause'); const open = el.classList.contains('hidden');
     if (open && this.modalOpen()) return;
@@ -475,6 +503,7 @@ export class UI {
     this.g.paused = open;
     if (open) {
       const s = this.g.state;
+      $('btnSkipTut').classList.toggle('hidden', !this.g.tut.active);
       $('btnSound').textContent = `SOUND: ${s.sound ? 'ON' : 'OFF'}`; $('btnQuality').textContent = `QUALITY: ${s.quality.toUpperCase()}`;
       const r = pilotRank(s);
       const ms = s.missions.length ? `<br><b>Contracts:</b>${s.missions.map((m) => `<br><small>★ ${m.title} → ${m.dest.name}, ${g_sys(this.g, m)} · due Day ${m.deadline}${m.vip ? ' · VIP' : ''}</small>`).join('')}` : '';
@@ -580,7 +609,12 @@ export class UI {
     $('stTitle').textContent = g.world.station.name.toUpperCase();
     $('stSub').textContent = `${sys.name} · ${FACTIONS[sys.eco].name} (${factionTier(standingWith(s, sys.eco)).name}) · Day ${s.day} · ${HULLS[p.hullId].name} (${HULLS[p.hullId].cls})`;
     $('stCred').textContent = `◈ ${fmt(s.credits)}`;
-    [...$('stTabs').children].forEach((t) => t.classList.toggle('on', t.dataset.tab === this.stTab));
+    // tabs open one at a time; a freshly opened one wears a NEW badge until visited
+    if (!tabOpen(s, this.stTab)) this.stTab = 'market';
+    if (s.tabs) s.tabs.seen[this.stTab] = 1;
+    [...$('stTabs').children].forEach((t) => { const k = t.dataset.tab, open = tabOpen(s, k); t.classList.toggle('on', k === this.stTab); t.classList.toggle('hidden', !open); t.classList.toggle('new', open && k !== 'market' && !!s.tabs && !s.tabs.all && !s.tabs.seen[k]); });
+    const ts = g.tut.active ? s.tut.step : -1;
+    $('btnUndock').classList.toggle('tut-glow', ts === 5 || ts === 0 || ts === 1);
     const body = $('stBody');
     const scroll = body.scrollTop;
     if (this.stTab === 'market') body.innerHTML = this.marketHTML();
@@ -606,7 +640,12 @@ export class UI {
     const used = p.cargoUsed(), cap = p.stats.cargo;
     let h = `<div class="row head" style="grid-template-columns:1fr auto"><span>HOLD ${used}/${cap} · ${HULLS[p.hullId].name}${p.reserved ? ` <small>(${p.reserved} contract)</small>` : ''}</span><span class="btns"><button class="sbtn sell" data-act="sellore" ${Object.keys(p.cargo).some((k) => COMM[k].kind === 'ore' && p.cargo[k] > 0) ? '' : 'disabled'}>SELL ALL ORE</button><button class="sbtn sell" data-act="sellall" ${used ? '' : 'disabled'}>SELL ALL</button></span></div>`;
     h += `<div class="row head"><span>COMMODITY</span><span>WE PAY</span><span>WE SELL</span><span>HOLD</span><span>ACTIONS</span></div>`;
+    const tutStep = g.tut.active ? g.state.tut.step : -1;
+    if (tutStep === 3) h = h.replace('data-act="sellore"', 'data-act="sellore" class-tut');
+    if (tutStep === 7) h = h.replace('data-act="sellall"', 'data-act="sellall" class-tut');
+    h = h.replace('class="sbtn sell" data-act="sellore" class-tut', 'class="sbtn sell tut-glow" data-act="sellore"').replace('class="sbtn sell" data-act="sellall" class-tut', 'class="sbtn sell tut-glow" data-act="sellall"');
     for (const c of COMMODITIES) {
+      if (g.tut.active && !(p.cargo[c.id] > 0)) continue; // training: only what's in your hold
       const sp = E.sellPrice(sid, c.id), canBuy = E.canBuy(sid, c.id) && E.stock(sid, c.id) > 0, bp = canBuy ? E.buyPrice(sid, c.id) : null;
       const have = p.cargo[c.id] || 0;
       const m = E.mult(sid, c.id);
@@ -627,6 +666,7 @@ export class UI {
           <button class="sbtn buy" data-act="buy" data-arg="${c.id}" data-n="${maxBuy}" ${maxBuy ? '' : 'disabled'}>MAX</button>
         </span></div>`;
     }
+    if (g.tut.active) return h + `<p style="font:600 12px var(--font);opacity:.75;margin:8px 4px">The full market (buying goods to sell elsewhere) opens after training.</p>`;
     h += `<p style="font:600 12px var(--font);opacity:.75;margin:8px 4px">Tip: “WE SELL” goods are produced here and cheap. Check the GALAXY chart for systems with HIGH DEMAND. Selling many units lowers the price until markets recover the next day.</p>`;
     return h;
   }
@@ -679,7 +719,7 @@ export class UI {
       const stamps = [1, 2, 3].map((i) => `<i class="${i <= lvl ? 'on' : ''}"></i>`).join('');
       h += `<div class="card"><h3>${M.name}<span class="lvl">${stamps}</span></h3><p>${M.desc}</p>
         <div class="delta">${statLine(k, lvl, rec.hull)}${next ? ` → <b>${statLine(k, next, rec.hull)}</b>` : ' · MAX'}</div>
-        ${next ? `<button class="pbtn ${g.state.credits >= price ? 'primary' : 'secondary'}" style="font-size:14px;padding:9px" data-act="upgrade" data-arg="${k}" ${g.state.credits >= price ? '' : 'disabled'}>INSTALL MK${next} · ◈ ${fmt(price)}</button>` : '<button class="pbtn secondary" disabled>FULLY UPGRADED</button>'}
+        ${next ? `<button class="pbtn ${g.state.credits >= price ? 'primary' : 'secondary'}${g.tut.active && g.state.tut.step === 4 && k === g.tut.recommendMod() ? ' tut-glow' : ''}" style="font-size:14px;padding:9px" data-act="upgrade" data-arg="${k}" ${g.state.credits >= price ? '' : 'disabled'}>INSTALL MK${next} · ◈ ${fmt(price)}</button>` : '<button class="pbtn secondary" disabled>FULLY UPGRADED</button>'}
         ${next && fab && U('fabrication') ? (() => { const mats = moduleMats(next), fc = Math.round(price * 0.45 / 10) * 10, ok = haveMats(g.player.cargo, mats) && g.state.credits >= fc; return `<button class="pbtn secondary" style="font-size:12px;padding:7px" data-act="fabmod" data-arg="${k}" ${ok ? '' : 'disabled'}>FABRICATE · ◈ ${fmt(fc)} + ${matsText(mats)}</button>`; })() : ''}
       </div>`;
     }
@@ -894,7 +934,7 @@ export class UI {
     } else if (act === 'fabmod') {
       const rec = g.activeShipRec(), lvl = rec.mods[arg] + 1, price = modulePrice(rec.hull, arg, lvl), fc = Math.round(price * 0.45 / 10) * 10, mats = moduleMats(lvl);
       if (lvl <= 3 && hasFabricator(g.sysInfo.eco) && s.credits >= fc && haveMats(p.cargo, mats)) {
-        s.credits -= fc; takeMats(p.cargo, mats); rec.mods[arg] = lvl; g.refreshPlayerStats(); s.craft.made++; s.stats.upgrades = (s.stats.upgrades || 0) + 1; s.stats.upgrades = (s.stats.upgrades || 0) + 1;
+        s.credits -= fc; takeMats(p.cargo, mats); rec.mods[arg] = lvl; g.refreshPlayerStats(); s.craft.made++; s.stats.upgrades = (s.stats.upgrades || 0) + 1;
         if (arg === 'missile') p.missiles = p.stats.mslCap;
         if (arg === 'barrier') p.shield = p.maxShield;
         g.audio.play('coins', { vol: 0.7 }); this.toast(`Fabricated ${MODULES[arg].name} Mk${lvl}: saved ◈ ${fmt(price - fc)}`, 'good', 3);
@@ -1022,7 +1062,7 @@ export class UI {
       const dest = dep.pos.clone().sub(pl.pos).normalize().multiplyScalar(100).add(dep.pos);
       items.push({ kind: 'planet', pos: pl.pos, dest, name: pl.data.name, color: `rgb(${pl.data.pal[1].map((x) => Math.round(x * 255)).join(',')})`, r: 4, ring: pl.radius, arrive: 45, deposit: dep });
     });
-    Wd.derelicts.forEach((d) => { if (!d.occupied) items.push({ kind: 'derelict', pos: d.pos, name: d.name, color: '#ffb07a', r: 5, arrive: 120 }); });
+    Wd.derelicts.forEach((d) => { if (!d.occupied) items.push({ kind: 'derelict', pos: d.pos, name: d.tut && g.tut.active ? `▶ ${d.name}` : d.name, color: d.tut && g.tut.active ? '#ffd34a' : '#ffb07a', r: d.tut && g.tut.active ? 8 : 5, arrive: 120 }); });
     items.push(...g.events.mapItems());
     items.push(...g.outposts.mapItems());
     items.push(...g.explore.mapItems());

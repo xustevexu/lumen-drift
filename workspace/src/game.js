@@ -25,6 +25,7 @@ import { Story, normalizeStoryState, lockAll, applyOrigin, isAccordEco } from '.
 import { AccordManager, ACCORD_RAID, FRINGE_RAID } from './accord.js';
 import { ArcManager, raidMult, fuelMult } from './arcs.js';
 import { Phase3 } from './phase3.js';
+import { Tutorial, normalizeTutState } from './tutorial.js';
 import { StationDefense } from './stationdef.js';
 import { SectorEvents, normalizeEventState } from './events.js';
 import { FACTIONS, LAWFUL, factionTier, standingWith, normalizeFactionState, applyUniques } from './factions.js';
@@ -70,6 +71,7 @@ export class Game {
     this.fleet = new FleetManager(this);
     this.explore = new ExploreManager(this);
     this.story = new Story(this);
+    this.tut = new Tutorial(this);
     this.accord = new AccordManager(this);
     this.arcs = new ArcManager(this);
     this.p3 = new Phase3(this);
@@ -84,7 +86,7 @@ export class Game {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveOnLeave(); });
     window.addEventListener('pagehide', saveOnLeave);
     this.state = saved || newState(params.get('seed') ? Number(params.get('seed')) : Math.floor(Math.random() * 1e9));
-    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state); normalizeSiegeState(this.state); normalizeFleetState(this.state); normalizeExploreState(this.state); normalizeCraftState(this.state); normalizeStoryState(this.state);
+    normalizeMissionState(this.state); normalizeEventState(this.state); normalizeFactionState(this.state); normalizeOutpostState(this.state); normalizeSiegeState(this.state); normalizeFleetState(this.state); normalizeExploreState(this.state); normalizeCraftState(this.state); normalizeStoryState(this.state); normalizeTutState(this.state);
     this.hasSave = !!saved;
     this.applyQuality(this.state.quality);
 
@@ -177,13 +179,19 @@ export class Game {
       clearAuto();
       const seed = Math.floor(Math.random() * 1e9);
       this.state = normalizeStoryState(normalizeCraftState(normalizeExploreState(normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(newState(seed))))))))));
+      normalizeTutState(this.state);
       clearSystemCache();
       this.galaxy = generateGalaxy(seed);
       this.economy = new Economy(this.galaxy, this.state);
       this.state.systemId = this.galaxy.startId;
       if (origin) { lockAll(this.state); applyOrigin(this.state, this.galaxy, origin); }
+      if (origin) { // new careers: tabs open gradually; the tutorial is on unless skipped
+        this.state.tabs = { all: false, seen: {}, told: {} };
+        this.state.tut = this.story.skipTut ? { done: true, step: 8, base: {}, held: [], skipped: true } : { done: false, step: 0, base: {}, held: [], sys: this.state.systemId };
+      }
       this.explore.ensureCores(this.state.systemId);
       this.enterSystem(this.state.systemId, null, true);
+      if (origin && !this.story.skipTut) this.tut.begin();
     }
     this.audio.unlock();
     this.audio.setEnabled(this.state.sound);
@@ -276,6 +284,7 @@ export class Game {
     this.siege.onEnterSystem();
     this.fleet.spawnAll();
     this.explore.onEnterSystem();
+    this.tut.onEnterSystem();
     this.accord.onEnterSystem();
     this.stationDef.onEnterSystem();
     this.arcs.onEnterSystem(initial);
@@ -403,7 +412,7 @@ export class Game {
 
   updateOutlawSchedule() {
     const roll = this.state.outlawRoll[this.outlawKey];
-    if (!roll || !roll.hit || roll.spawned) return;
+    if (!roll || !roll.hit || roll.spawned || this.tut.active) return;
     const lead = this.player.stats.sensorLvl >= 2 ? 0.13 : 0;
     if (lead && !roll.warned && this.state.dayTime >= roll.at - lead) {
       roll.warned = true;
@@ -661,12 +670,12 @@ export class Game {
     this.economy.recordIntel(sid);
     this.audio.play('warp', { vol: 0.5, rate: 0.7 });
     this.deliverAtStation();
-    this.accord.onDock();
+    if (!this.tut.active) this.accord.onDock(); // no tariffs on the training run
     this.refuel(true);
     this.fleet.despawnAll();
     this.save();
     this.ui.openStation();
-    setTimeout(() => { if (this.docked) this.arcs.onDock(); }, 450);
+    setTimeout(() => { if (this.docked && !this.tut.active) this.arcs.onDock(); }, 450);
   }
   undock() {
     this.docked = false;
@@ -710,6 +719,7 @@ export class Game {
   // Replace the whole career with a loaded save (slot, autosave or imported file).
   loadGame(state) {
     this.state = normalizeStoryState(normalizeCraftState(normalizeExploreState(normalizeFleetState(normalizeSiegeState(normalizeOutpostState(normalizeFactionState(normalizeEventState(normalizeMissionState(state)))))))));
+    normalizeTutState(this.state);
     clearSystemCache();
     this.galaxy = applyUnlocks(generateGalaxy(state.seed), state);
     this.economy = new Economy(this.galaxy, state);
@@ -960,10 +970,11 @@ export class Game {
     if (this.salvage.t >= 3.5) {
       const d = act.derelict; const rng = new RNG(d.seed + this.state.day);
       this.state.derelictLooted[`${this.state.systemId}:${d.seed}`] = this.state.day;
-      const credits = rng.int(150, 700) + pilotRank(this.state) * 120;
+      const fixed = this.tut.salvageLoot(d);
+      const credits = fixed ? fixed.credits : rng.int(150, 700) + pilotRank(this.state) * 120;
       this.addCredits(credits);
       const goods = ['parts', 'data', 'medical', 'luxury', 'lumenite'];
-      const g = rng.pick(goods); const q = Math.min(this.cargoFree(), rng.int(2, g === 'luxury' || g === 'lumenite' ? 3 : 8));
+      const g = fixed ? fixed.good : rng.pick(goods); const q = Math.min(this.cargoFree(), fixed ? fixed.q : rng.int(2, g === 'luxury' || g === 'lumenite' ? 3 : 8));
       if (q > 0) this.player.cargo[g] = (this.player.cargo[g] || 0) + q;
       let extra = '';
       if (this.player.stats.mslCap > 0 && rng.chance(0.4)) { this.player.missiles = Math.min(this.player.stats.mslCap, this.player.missiles + 2); extra = ' + 2 missiles'; }
@@ -1276,6 +1287,7 @@ export class Game {
     this.fx.update(simPaused ? 0 : dt);
     this.audio.listener = this.camera.position;
     this.post.grade.uniforms.uDamage.value = Math.max(0, this.post.grade.uniforms.uDamage.value - dt * 1.5);
+    this.tut.update(dt);
     if (this.mode === 'play') this.ui.update(dt);
     // dim exposure + bloom when hugging a planet surface (ore sites were washing out)
     let near = 0; const cp = this.camera.position;
