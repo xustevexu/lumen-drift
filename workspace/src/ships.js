@@ -25,9 +25,9 @@ function mats() {
   M.trimWhite = trimMaterial(0xdff6ff, 3.0);
   M.nozzle = new THREE.MeshStandardMaterial({ color: 0x1a1e24, metalness: 0.85, roughness: 0.3, side: THREE.DoubleSide }); // open bell: both sides visible
   M.solar = new THREE.MeshStandardMaterial({ color: 0x16305a, metalness: 0.6, roughness: 0.25, emissive: 0x0a1a3a, emissiveIntensity: 0.6, envMapIntensity: 1.5 });
-  M.ventTeal = trimMaterial(0x3fd0e6, 1.3);
-  M.ventAmber = trimMaterial(0xff9a40, 1.3);
-  M.ventRed = trimMaterial(0xff4a30, 1.4);
+  M.ventTeal = trimMaterial(0x3fd0e6, 0.42); // heat vents glow softly; bright enough to bloom they read as a square light
+  M.ventAmber = trimMaterial(0xff9a40, 0.42);
+  M.ventRed = trimMaterial(0xff4a30, 0.45);
   M.ready = true;
   return M;
 }
