@@ -485,3 +485,8 @@ body.gamepad .row:not(.head):has(.gp-focus) .nm { color: #ffd2b8; }
 #comm .comm-ok { margin-top: 6px; float: right; font-size: 12px; padding: 4px 12px; animation: okPulse 1.4s ease-in-out infinite; }
 #comm .comm-ok.hidden { display: none; }
 @keyframes okPulse { 50% { filter: brightness(1.25); } }
+/* right side of the screen: drag to look around (touch buttons sit on top of it) */
+#lookZone { position: absolute; right: 0; top: 64px; bottom: 0; width: 54%; touch-action: none; }
+#hud.docked #lookZone { display: none; }
+@media (max-width: 900px) { #lookZone { width: 45%; } }
+#topStack, #autopilot, #raidBanner { z-index: 5; }

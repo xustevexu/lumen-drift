@@ -41,7 +41,7 @@ export class Game {
     this.time = 0; this.mode = 'loading';
     this.traders = []; this.outlaws = [];
     this.input = { sx: 0, sy: 0, throttle: 0.35, fire: false, mine: false, boost: false };
-    this.freeLook = { x: 0, y: 0 }; this.lookOff = { yaw: 0, pitch: 0 }; // right-stick camera look
+    this.freeLook = { x: 0, y: 0 }; this.ptrLook = { x: 0, y: 0 }; this.lookOff = { yaw: 0, pitch: 0 }; // camera look: right stick (freeLook) + touch/mouse drag (ptrLook)
     this.target = null; this.autopilot = null; this.warp = null;
     this.docked = false; this.paused = false; this.shake = 0;
     this.mineAcc = 0; this.salvage = null;
@@ -1192,7 +1192,7 @@ export class Game {
   updateCamera(dt) {
     const p = this.player; const cam = this.camera;
     // free-look offsets: ease toward the right stick, spring back to the chase view when it's released
-    const fl = this.freeLook, lk = this.lookOff;
+    const pl = this.ptrLook, fl = { x: Math.max(-1, Math.min(1, this.freeLook.x + pl.x)), y: Math.max(-1, Math.min(1, this.freeLook.y + pl.y)) }, lk = this.lookOff;
     const held = Math.abs(fl.x) + Math.abs(fl.y) > 0;
     lk.yaw = damp(lk.yaw, -fl.x * Math.PI * 0.95, held ? 7 : 4, dt); // stick right → look right
     lk.pitch = damp(lk.pitch, fl.y * 1.15, held ? 7 : 4, dt);

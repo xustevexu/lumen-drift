@@ -88,6 +88,19 @@ export class UI {
     const end = (e) => { if (e.pointerId !== sid) return; sid = null; inp.sx = 0; inp.sy = 0; stick.classList.remove('on'); };
     zone.addEventListener('pointerup', end); zone.addEventListener('pointercancel', end);
 
+    // look around: drag on the right side of the screen (finger or mouse), or hold the right mouse button anywhere
+    const look = { id: null, ox: 0, oy: 0 }, LR = 150, pl = this.g.ptrLook;
+    const lookStart = (e) => { if (look.id !== null) return; look.id = e.pointerId; look.ox = e.clientX; look.oy = e.clientY; e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); };
+    const lookMove = (e) => { if (e.pointerId !== look.id) return; pl.x = Math.max(-1, Math.min(1, (e.clientX - look.ox) / LR)); pl.y = Math.max(-1, Math.min(1, (e.clientY - look.oy) / LR)); };
+    const lookEnd = (e) => { if (e.pointerId !== look.id) return; look.id = null; pl.x = 0; pl.y = 0; };
+    const lz = $('lookZone');
+    lz.addEventListener('pointerdown', lookStart); lz.addEventListener('pointermove', lookMove); lz.addEventListener('pointerup', lookEnd); lz.addEventListener('pointercancel', lookEnd);
+    lz.addEventListener('contextmenu', (e) => e.preventDefault()); zone.addEventListener('contextmenu', (e) => e.preventDefault());
+    // right mouse button over the steering side looks too, instead of steering
+    zone.addEventListener('pointerdown', (e) => { if (e.button === 2) { e.stopImmediatePropagation(); lookStart(e); } }, { capture: true });
+    zone.addEventListener('pointermove', (e) => { if (e.pointerId === look.id) { e.stopImmediatePropagation(); lookMove(e); } }, { capture: true });
+    for (const ev of ['pointerup', 'pointercancel']) zone.addEventListener(ev, (e) => { if (e.pointerId === look.id) { e.stopImmediatePropagation(); lookEnd(e); } }, { capture: true });
+
     const thr = $('throttle');
     let tid = null;
     const setThr = (e) => { const r = thr.getBoundingClientRect(); inp.throttle = clamp(1 - (e.clientY - r.top) / r.height, 0, 1); };
