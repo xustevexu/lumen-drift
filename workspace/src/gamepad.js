@@ -164,6 +164,8 @@ export class GamepadInput {
     if (S.hit(B.B)) g.fireMissile();
     if (S.hit(B.Y)) g.setCruise(!g.player.cruise);
     if (S.hit(B.LB)) g.cycleTarget();
+    // D-pad left: cancel autopilot (same as the ✕ on the autopilot chip: press again to clear a multi-jump course)
+    if (S.hit(B.LEFT)) { if (g.autopilot) { g.autopilot = null; g.player.cruise = false; this.ui.toast('Autopilot off', 'info', 1.5); } else if (g.state.course) g.cancelCourse(); }
     if (S.hit(B.BACK)) this.ui.openMap();
     if (S.hit(B.START)) this.ui.togglePause();
   }

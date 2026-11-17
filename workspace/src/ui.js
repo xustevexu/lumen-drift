@@ -208,8 +208,9 @@ export class UI {
     // autopilot
     const course = st.course;
     $('autopilot').classList.toggle('hidden', !g.autopilot && !course);
-    if (g.autopilot) $('apName').textContent = `${g.autopilot.name} · ${this.dist(g.autopilot.pos.distanceTo(p.pos))}`;
-    else if (course) { const h = g.courseHop(); $('apName').textContent = h ? `COURSE: ${course.name} · next jump ${g.galaxy.systems[h.next].name} (follow ▶)` : `COURSE: ${course.name}`; }
+    const padHint = g.pad && g.pad.active ? ' · ◀ cancels' : '';
+    if (g.autopilot) $('apName').textContent = `${g.autopilot.name} · ${this.dist(g.autopilot.pos.distanceTo(p.pos))}${padHint}`;
+    else if (course) { const h = g.courseHop(); $('apName').textContent = (h ? `COURSE: ${course.name} · next jump ${g.galaxy.systems[h.next].name} (follow ▶)` : `COURSE: ${course.name}`) + padHint; }
     // target panel
     const t = g.target, tp = $('targetPanel');
     if (t && !t.dead) {
