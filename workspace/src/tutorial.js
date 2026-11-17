@@ -135,7 +135,6 @@ export class Tutorial {
     if (s.story.debt > 0) s.story.debtCheck = s.day + 7; // the marker's clock starts now
     document.body.classList.remove('tut-calm');
     this.hide();
-    g.story.lastOpen = performance.now() / 1000; // space out the first unlock messages
     if (!skipped) {
       // one wrap-up from Wick (loop + where messages and goals live); the map was already covered in training
       s.story.said['tip-map'] = 1; s.story.said['tip-log'] = 1;
@@ -218,6 +217,6 @@ export class Tutorial {
       hangar: "Shipyard's open to you now: bigger hulls with more hold, more guns, or both. Every ship keeps its own upgrades.",
       bar: "The station Cantina is worth a look now. Pilots talk, and the Pilot Record shows what the sector thinks of you.",
     };
-    for (const k in intro) if (!s.tabs.told[k] && tabOpen(s, k)) { s.tabs.told[k] = 1; g.story.comm('wick', intro[k]); return; }
+    for (const k in intro) if (!s.tabs.told[k] && tabOpen(s, k) && g.story.introSlot()) { g.story.useIntroSlot(); s.tabs.told[k] = 1; g.story.comm('wick', intro[k]); return; }
   }
 }

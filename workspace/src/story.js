@@ -155,6 +155,7 @@ export class Story {
     const s = this.state;
     if (opts.once) { if (s.story.said[opts.once]) return; s.story.said[opts.once] = 1; }
     // during the tutorial only Wick's training lines play; everything else waits for graduation
+    if (this.gradual() && id !== 'wick' && !opts.intro) s.story.beatDay = s.day; // a story beat today: new features wait
     if (this.g.tut && this.g.tut.active && !opts.tut) { s.tut.held.push([id, text, { ack: opts.ack, kind: opts.kind }]); return; }
     this.queue.push({ id, text, chatter: false, ack: opts.ack !== false });
     this.log(CAST[id].name, text, opts.kind || 'info');
@@ -296,12 +297,16 @@ export class Story {
     this.check -= dt; if (this.check > 0 || this.g.mode !== 'play') return;
     this.check = 1;
     if (this.g.tut.active) return; // the tutorial owns the first minutes
+    // story first, so a story beat today pushes feature introductions to tomorrow
+    this.updateDebt();
+    this.g.arcs.update();
+    this.g.p3.update(1);
     this.g.tut.updateTabs();
     const s = this.state, U = s.unlocks, g = this.g, rank = pilotRank(s), eco = g.sysInfo.eco;
-    // one new feature at a time, at least 40 s apart, so they don't pile up
-    const open = (k, id, text) => { if (U[k]) return; if (s.tut && s.tut.gradDay != null && s.day <= s.tut.gradDay) return; const now = performance.now() / 1000; if (now - (this.lastOpen || -1e9) < 40) return; this.lastOpen = now; U[k] = true; this.comm(id, text, { kind: 'good' }); g.save(); };
-    if (!U.events && s.day >= 2) open('events', 'wick', 'Heads up: the sector is waking up. Distress beacons, ore surges and market shocks will pop up from today. Check Sector News in station Services, and the galaxy map for icons.');
+    // new careers: one new feature per in-game day (never on graduation day). Older saves: 40 s apart.
+    const open = (k, id, text) => { if (U[k] || !this.introSlot()) return; this.useIntroSlot(); U[k] = true; this.comm(id, text, { kind: 'good', intro: true }); g.save(); };
     if (!U.contracts && (s.stats.trades >= 1 || s.day >= 2)) open('contracts', isAccordEco(eco) ? 'hale' : 'kask', isAccordEco(eco) ? 'Station boards post contracts: cargo runs, passengers, supply orders. Honest work for an independent. The Contracts tab is open at every station.' : "Want steady coin? Stations post contracts: haul it, fly 'em, supply it. Check the Contracts tab next time you dock. Pays better than rocks.");
+    if (!U.events && s.day >= 2) open('events', 'wick', 'Heads up: the sector is waking up. Distress beacons, ore surges and market shocks will pop up from today. Check Sector News in station Services, and the galaxy map for icons.');
     if (!U.factions && s.stats.contracts >= 1) open('factions', 'wick', 'First contract done. Stations belong to factions, and they remember who helps them. The Accord (Institute, Combine, Cooperative) runs the patrolled core; the Fringe (Union, Settlers) fends for itself. Standing is in Services → Factions.');
     if (!U.exploration && (Object.keys(s.explore.seen).length || s.day >= 4)) open('exploration', 'solak', "Fascinating readings around here. Every system hides anomalies: old wrecks, rifts, crystal pockets. Your sensors pick them up when you're close; a scanner probe (sold in Services) maps a whole system. Send me anything interesting.");
     if (!U.outposts && rank >= 1 && s.day >= 4 && (s.stats.contracts >= 1 || s.stats.trades >= 5)) open('outposts', 'ama', "You're making a name. Out here, people who build stay. Buy an Outpost Charter at any station and set down at an asteroid field or a planet deposit. It'll mine while you fly.");
@@ -312,10 +317,17 @@ export class Story {
       const why = g.p3.p.news.find((n) => n.k === 'you' && !n.t.startsWith("Pilots' Guild"));
       open('rival', 'kask', `You made the news${why ? `: "${why.t.replace(/\.$/, '')}"` : ''}. Word travels. There's a bounty hunter named Kade Rourke who collects reputations the way you collect ore, and he's started asking about you in the cantinas. Show-off, very good. He'll come looking.`);
     }
-    this.updateDebt();
-    this.g.arcs.update();
-    this.g.p3.update(1);
   }
+
+  // pacing for "something new is open" messages
+  gradual() { const s = this.state; return !!(s.tabs && !s.tabs.all); }
+  introSlot() {
+    const s = this.state;
+    if (s.tut && s.tut.gradDay != null && s.day <= s.tut.gradDay) return false;
+    if (this.gradual()) return s.day > (s.story.introDay ?? -1) && s.day > (s.story.beatDay ?? -1) && !this.queue.length && !this.cur;
+    return performance.now() / 1000 - (this.lastOpen || -1e9) >= 40;
+  }
+  useIntroSlot() { this.state.story.introDay = this.state.day; this.lastOpen = performance.now() / 1000; }
 
   // ---- the Debtor's marker ----
   updateDebt() {

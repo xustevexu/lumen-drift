@@ -14,6 +14,8 @@ pick the training wreck ("Drifting Hauler", placed ~1.5 km from the station) and
 - The intro shows two short lines per origin plus a TUTORIAL: ON/OFF toggle; the pause menu has SKIP TUTORIAL.
 - Station tabs open progressively for every new career (Market → Upgrades → Services at graduation → Contracts
   via its unlock → Shipyard at rank 1 / ◈12k / a second ship → Cantina from day 3 or first contract), each with a
-  NEW badge until visited; Wick introduces Shipyard and Cantina. Feature-unlock messages are spaced ≥40 s apart.
+  NEW badge until visited; Wick introduces Shipyard and Cantina. New careers get at most one "something new" message
+  per in-game day, none on graduation day and none on a day the story already spoke (sector events stay off until
+  announced). Older saves keep the 40 s spacing.
 - The Journal opens with WHAT NEXT? (next upgrade, take a contract, follow your story) until all three are done.
 - Older saves skip the tutorial and keep every tab.

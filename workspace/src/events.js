@@ -118,12 +118,12 @@ export class SectorEvents {
   // ---- lifecycle hooks called by Game ----
   onEnterSystem() {
     this.rt.clear(); this.assist = null; // Game already removed last system's ships and rebuilt the world
-    const fresh = this.g.tut && this.g.tut.active ? [] : rollEvents(this.state, this.g.galaxy);
+    const fresh = (this.g.tut && this.g.tut.active) || (this.state.tabs && !this.state.tabs.all && !unlocked(this.state, 'events')) ? [] : rollEvents(this.state, this.g.galaxy);
     this.announceNews(fresh);
     this.sync(true);
   }
   newDay() {
-    if (!unlocked(this.state, 'events') && this.state.day < 2) return;
+    if (!unlocked(this.state, 'events') && (this.state.day < 2 || (this.state.tabs && !this.state.tabs.all))) return; // new careers: only once Wick has announced them
     if (this.g.tut && this.g.tut.active) return;
     const fresh = rollEvents(this.state, this.g.galaxy);
     this.announceNews(fresh);
